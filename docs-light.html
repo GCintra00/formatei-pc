@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Formatei o PC - Documentacao</title>
+<style>
+body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #333; line-height: 1.6; }
+h1 { color: #6c5ce7; border-bottom: 3px solid #6c5ce7; padding-bottom: 10px; }
+h2 { color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 30px; }
+h3 { color: #555; }
+.comando { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 6px; font-family: 'Consolas', monospace; font-size: 14px; overflow-x: auto; margin: 10px 0; }
+.aviso { background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px 15px; margin: 10px 0; border-radius: 0 6px 6px 0; }
+.info { background: #d1ecf1; border-left: 4px solid #17a2b8; padding: 12px 15px; margin: 10px 0; border-radius: 0 6px 6px 0; }
+.sucesso { background: #d4edda; border-left: 4px solid #28a745; padding: 12px 15px; margin: 10px 0; border-radius: 0 6px 6px 0; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; }
+th { background: #f5f5f5; font-weight: bold; }
+tr:nth-child(even) { background: #fafafa; }
+code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', monospace; font-size: 13px; }
+.step { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 15px 20px; margin: 15px 0; }
+.step-number { display: inline-block; background: #6c5ce7; color: white; width: 28px; height: 28px; border-radius: 50%; text-align: center; line-height: 28px; font-weight: bold; margin-right: 8px; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 12px; margin: 2px; }
+.tag-remove { background: #fce4e4; color: #c0392b; }
+.tag-install { background: #d4edda; color: #155724; }
+.tag-config { background: #e8e0ff; color: #5b3cc4; }
+.tag-manual { background: #fff3cd; color: #856404; }
+</style>
+</head>
+<body>
+
+<h1>Formatei o PC e Agora o Que Fazer?</h1>
+<p><strong>Uso:</strong> Pessoal &nbsp;|&nbsp; <strong>Ultima atualizacao:</strong> Marco 2026 &nbsp;|&nbsp; <strong>Repositorio:</strong> <a href="https://github.com/GCintra00/formatei-pc">github.com/GCintra00/formatei-pc</a></p>
+
+<div class="info">
+<strong>Compatibilidade:</strong> Windows 10 e Windows 11
+</div>
+
+<!-- ============================= -->
+<h2>1. Como Executar</h2>
+<!-- ============================= -->
+
+<p>Script que configura o PC apos uma formatacao: remove bloatware, instala programas, personaliza o desktop e limpa o sistema.</p>
+
+<h3>Pre-requisitos</h3>
+<ul>
+<li>PC conectado a internet</li>
+<li>Desktop do Windows acessivel (OOBE finalizado)</li>
+</ul>
+
+<h3>Passos</h3>
+
+<div class="step">
+<span class="step-number">1</span> Abrir o <strong>PowerShell como Administrador</strong>
+<br><br>
+<em>Clique com botao direito no icone do Windows > Terminal (Admin) ou Windows PowerShell (Admin)</em>
+</div>
+
+<div class="step">
+<span class="step-number">2</span> Colar e executar o comando abaixo:
+<div class="comando">irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex</div>
+</div>
+
+<div class="step">
+<span class="step-number">3</span> Aguardar a execucao. Ha dois passos manuais:
+<ul style="margin-top: 8px;">
+<li><strong>AnyDesk:</strong> Clicar em "Instalar AnyDesk" quando a janela abrir</li>
+<li><strong>uTorrent Web:</strong> Clicar Next > Agree > Skip All > Finish</li>
+</ul>
+</div>
+
+<div class="sucesso">
+<strong>DNS automatico:</strong> O script configura o DNS para Google (8.8.8.8 / 8.8.4.4) antes de comecar.
+</div>
+
+<!-- ============================= -->
+<h2>2. O Que o Script Faz (8 Etapas)</h2>
+<!-- ============================= -->
+
+<table>
+<tr><th>Etapa</th><th>Acao</th><th>Detalhes</th></tr>
+<tr>
+    <td>1</td>
+    <td>Remove bloatware</td>
+    <td>
+        <span class="tag tag-remove">McAfee</span>
+        <span class="tag tag-remove">OneDrive</span>
+        <span class="tag tag-remove">Teams</span>
+        <span class="tag tag-remove">Xbox (todos)</span>
+        <span class="tag tag-remove">Spotify</span>
+        <span class="tag tag-remove">Candy Crush</span>
+        <span class="tag tag-remove">TikTok</span>
+        <span class="tag tag-remove">Facebook</span>
+        <span class="tag tag-remove">Instagram</span>
+        <span class="tag tag-remove">Disney+</span>
+        <span class="tag tag-remove">Clipchamp</span>
+        <span class="tag tag-remove">Skype</span>
+        <span class="tag tag-remove">LinkedIn</span>
+        <span class="tag tag-remove">Solitaire</span>
+        <span class="tag tag-remove">Bing News/Weather</span>
+        <span class="tag tag-remove">Mail</span>
+        <span class="tag tag-remove">Todos</span>
+    </td>
+</tr>
+<tr>
+    <td>2</td>
+    <td>Instala programas (Winget)</td>
+    <td>Chrome, Discord, Steam, Epic Games, Opera GX, Bambu Studio, Logitech G Hub, Lightshot, Calibre, HakuNeko, KCC, Kindle Previewer. AnyDesk via download <span class="tag tag-manual">clique manual</span></td>
+</tr>
+<tr>
+    <td>3</td>
+    <td>Instala programas (Release)</td>
+    <td>WinRAR 7.11 BR (silencioso), STL Thumb (silencioso), uTorrent Web <span class="tag tag-manual">clique manual</span></td>
+</tr>
+<tr>
+    <td>4</td>
+    <td>Baixa arquivos extras</td>
+    <td>Cria pasta <code>Downloads Setup</code> no desktop com: softwares de teclado (K585, K552), wallpaper Opera, atalho NVIDIA Drivers, WinKeygen. Subpasta <code>Kindle</code> com atalhos dos 4 apps de leitura.</td>
+</tr>
+<tr>
+    <td>5</td>
+    <td>Wallpaper e sons USB</td>
+    <td>Wallpaper aplicado automaticamente. Sons: <strong>Yamete Kudasai</strong> (USB conectar) e <strong>Kyaa</strong> (USB desconectar)</td>
+</tr>
+<tr>
+    <td>6</td>
+    <td>Desativa notificacoes</td>
+    <td>Desativa toasts, sons, central de notificacoes, tela de bloqueio, sugestoes, dicas e consumer features via registro + politica de grupo</td>
+</tr>
+<tr>
+    <td>7</td>
+    <td>Limpa barra de tarefas</td>
+    <td>Remove Cortana, Widgets, Chat, Task View, busca, noticias. Limpa Menu Iniciar. Tenta fixar: Opera GX, Chrome, Explorador</td>
+</tr>
+<tr>
+    <td>8</td>
+    <td>Remove auto-inicio</td>
+    <td>Remove todos os programas do startup. Mantem apenas: AnyDesk (--control), Lightshot, SecurityHealth, RtkAudUService</td>
+</tr>
+</table>
+
+<!-- ============================= -->
+<h2>3. Programas Instalados</h2>
+<!-- ============================= -->
+
+<h3>Via Winget (automatico)</h3>
+
+<table>
+<tr><th>Programa</th><th>Winget ID</th><th>Categoria</th></tr>
+<tr><td>Google Chrome</td><td><code>Google.Chrome</code></td><td>Navegador</td></tr>
+<tr><td>Opera GX</td><td><code>Opera.OperaGX</code></td><td>Navegador</td></tr>
+<tr><td>Discord</td><td><code>Discord.Discord</code></td><td>Comunicacao</td></tr>
+<tr><td>Steam</td><td><code>Valve.Steam</code></td><td>Games</td></tr>
+<tr><td>Epic Games Launcher</td><td><code>EpicGames.EpicGamesLauncher</code></td><td>Games</td></tr>
+<tr><td>Bambu Studio</td><td><code>Bambulab.Bambustudio</code></td><td>Impressao 3D</td></tr>
+<tr><td>Logitech G Hub</td><td><code>Logitech.GHUB</code></td><td>Periferico</td></tr>
+<tr><td>Lightshot</td><td><code>Skillbrains.Lightshot</code></td><td>Utilitario</td></tr>
+<tr><td>Calibre</td><td><code>calibre.calibre</code></td><td>Leitura/Kindle</td></tr>
+<tr><td>HakuNeko</td><td><code>HakuNeko.HakuNeko</code></td><td>Leitura/Kindle</td></tr>
+<tr><td>KCC</td><td><code>ciromattia.KCC</code></td><td>Leitura/Kindle</td></tr>
+<tr><td>Kindle Previewer</td><td><code>Amazon.KindlePreviewer</code></td><td>Leitura/Kindle</td></tr>
+</table>
+
+<h3>Via GitHub Release (v1.0)</h3>
+
+<table>
+<tr><th>Programa</th><th>Instalacao</th></tr>
+<tr><td>AnyDesk</td><td><span class="tag tag-manual">Manual</span> — clicar em "Instalar AnyDesk"</td></tr>
+<tr><td>WinRAR 7.11 BR</td><td><span class="tag tag-install">Silenciosa</span> (<code>/S</code>)</td></tr>
+<tr><td>STL Thumb</td><td><span class="tag tag-install">Silenciosa</span> (<code>/S</code>)</td></tr>
+<tr><td>uTorrent Web</td><td><span class="tag tag-manual">Manual</span> — Next > Agree > Skip All > Finish</td></tr>
+</table>
+
+<!-- ============================= -->
+<h2>4. Arquivos da Release v1.0</h2>
+<!-- ============================= -->
+
+<p>Arquivos hospedados em <a href="https://github.com/GCintra00/formatei-pc/releases/tag/v1.0">github.com/GCintra00/formatei-pc/releases/tag/v1.0</a></p>
+
+<table>
+<tr><th>Arquivo</th><th>Tipo</th><th>Uso</th></tr>
+<tr><td><code>AnyDesk.exe</code></td><td>Instalador</td><td>Acesso remoto</td></tr>
+<tr><td><code>winrar-x64-711br.exe</code></td><td>Instalador</td><td>Compactador</td></tr>
+<tr><td><code>STL-Thumb-Windows_0.5.0.exe</code></td><td>Instalador</td><td>Thumbnails STL no Explorer</td></tr>
+<tr><td><code>utweb_installer.exe</code></td><td>Instalador</td><td>Torrent</td></tr>
+<tr><td><code>WinKeygen.rar</code></td><td>Utilitario</td><td>Ativador do Windows</td></tr>
+<tr><td><code>K585.DITI.half.hand.zip</code></td><td>Software</td><td>Teclado mecanico K585</td></tr>
+<tr><td><code>Kurama.Software.e.reset.K552RGB-BRS.rar</code></td><td>Software</td><td>Teclado mecanico K552</td></tr>
+<tr><td><code>wallpaper.windows.jpg</code></td><td>Imagem</td><td>Wallpaper do desktop</td></tr>
+<tr><td><code>wallpaper.opera.jpg</code></td><td>Imagem</td><td>Wallpaper do Opera GX</td></tr>
+<tr><td><code>Yamete.Kudasai.wav</code></td><td>Som</td><td>USB conectado</td></tr>
+<tr><td><code>Kyaa.wav</code></td><td>Som</td><td>USB desconectado</td></tr>
+<tr><td><code>Abrir_NVIDIA_Drivers.url</code></td><td>Atalho</td><td>Download drivers NVIDIA</td></tr>
+</table>
+
+<!-- ============================= -->
+<h2>5. Auto-Inicio (Startup)</h2>
+<!-- ============================= -->
+
+<p>O script remove <strong>todos</strong> os programas do auto-inicio, mantendo apenas:</p>
+
+<table>
+<tr><th>Programa</th><th>Motivo</th></tr>
+<tr><td><code>AnyDesk (--control)</code></td><td>Acesso remoto em segundo plano</td></tr>
+<tr><td><code>Lightshot</code></td><td>Screenshots rapidos</td></tr>
+<tr><td><code>SecurityHealth</code></td><td>Windows Defender</td></tr>
+<tr><td><code>RtkAudUService</code></td><td>Driver de audio Realtek</td></tr>
+</table>
+
+<p>A limpeza e feita em multiplas camadas:</p>
+<ul>
+<li>Registro <code>HKCU\...\Run</code> e <code>HKLM\...\Run</code></li>
+<li>Pastas Startup (usuario e comum)</li>
+<li><code>StartupApproved</code> (Gerenciador de Tarefas)</li>
+<li>Tarefas agendadas de logon</li>
+<li>Configs especificas: Discord (<code>settings.json</code>), Steam, Slack, Epic Games, Logitech G Hub</li>
+</ul>
+
+<!-- ============================= -->
+<h2>6. Resumo Final (exemplo)</h2>
+<!-- ============================= -->
+
+<div class="comando" style="color: #aaa;">
+=========================================<br>
+&nbsp;&nbsp;SETUP CONCLUIDO!<br>
+&nbsp;&nbsp;Tudo instalado sem erros!<br>
+=========================================<br><br>
+Programas:<br>
+&nbsp;&nbsp;Google Chrome - Instalado<br>
+&nbsp;&nbsp;Discord - Instalado<br>
+&nbsp;&nbsp;Steam - Instalado<br>
+&nbsp;&nbsp;Epic Games - Instalado<br>
+&nbsp;&nbsp;Opera GX - Instalado<br>
+&nbsp;&nbsp;Bambu Studio - Instalado<br>
+&nbsp;&nbsp;Logitech G Hub - Instalado<br>
+&nbsp;&nbsp;Lightshot - Instalado<br>
+&nbsp;&nbsp;Calibre - Instalado<br>
+&nbsp;&nbsp;HakuNeko - Instalado<br>
+&nbsp;&nbsp;KCC - Instalado<br>
+&nbsp;&nbsp;Kindle Previewer - Instalado<br>
+&nbsp;&nbsp;AnyDesk - Instalado<br>
+&nbsp;&nbsp;WinRAR - Instalado<br>
+&nbsp;&nbsp;STL Thumb - Instalado<br>
+&nbsp;&nbsp;uTorrent Web - Instalado<br><br>
+=========================================
+</div>
+
+<!-- ============================= -->
+<h2>7. Solucao de Problemas</h2>
+<!-- ============================= -->
+
+<table>
+<tr><th>Problema</th><th>Solucao</th></tr>
+<tr><td>"Execute como Administrador"</td><td>Feche o PowerShell e abra com botao direito > Executar como Administrador</td></tr>
+<tr><td>Erro de DNS / download falha</td><td>O script ja corrige o DNS automaticamente. Se persistir, conecte via cabo.</td></tr>
+<tr><td>AnyDesk nao instala</td><td>O script abre o instalador. Clique em "Instalar AnyDesk" na janela que abrir e feche depois.</td></tr>
+<tr><td>Programa deu ERRO</td><td>Execute o setup novamente — programas ja instalados serao detectados e pulados.</td></tr>
+<tr><td>Barra de tarefas nao fixou programas</td><td>Limitacao do Windows 11. Fixar Opera GX, Chrome e Explorador manualmente.</td></tr>
+<tr><td>Mudancas na barra nao apareceram</td><td>Reinicie o PC. O Explorer nao e reiniciado pelo script para evitar janelas indesejadas.</td></tr>
+</table>
+
+<!-- ============================= -->
+<h2>8. Manutencao do Script</h2>
+<!-- ============================= -->
+
+<div class="info">
+<strong>Repositorio:</strong> <a href="https://github.com/GCintra00/formatei-pc">https://github.com/GCintra00/formatei-pc</a><br>
+Qualquer alteracao feita no repositorio e aplicada automaticamente na proxima execucao do comando.
+</div>
+
+<h3>Arquivos</h3>
+<table>
+<tr><th>Arquivo</th><th>Funcao</th></tr>
+<tr><td><code>setup.ps1</code></td><td>Script principal de configuracao (8 etapas)</td></tr>
+<tr><td>Release v1.0</td><td>Instaladores e arquivos extras (12 arquivos)</td></tr>
+</table>
+
+<h3>Para adicionar/remover programas Winget</h3>
+<p>Editar o array <code>$programas</code> no <code>setup.ps1</code>. O ID pode ser encontrado com <code>winget search "nome"</code>.</p>
+
+<h3>Para atualizar instaladores da Release</h3>
+<p>Criar uma nova Release no GitHub com os novos arquivos e atualizar a variavel <code>$ghRelease</code> no script.</p>
+
+<!-- ============================= -->
+<h2>9. Notas Tecnicas</h2>
+<!-- ============================= -->
+
+<table>
+<tr><th>Decisao</th><th>Motivo</th></tr>
+<tr><td>WinRAR via Release (nao Winget)</td><td>Winget dava erro na instalacao</td></tr>
+<tr><td>AnyDesk requer clique manual</td><td>Precisa clicar para instalar como servico</td></tr>
+<tr><td>uTorrent requer cliques manuais</td><td>Instalador nao suporta modo silencioso</td></tr>
+<tr><td>Explorer nao reinicia no final</td><td>Reiniciar abria uma janela indesejada do Explorador</td></tr>
+<tr><td>Fixar na barra pode nao funcionar</td><td>Windows 11 bloqueia fixacao via script (limitacao Microsoft)</td></tr>
+<tr><td>Fusion 360 removido do script</td><td>Atualizacoes frequentes + licenca pessoal precisa baixar na hora</td></tr>
+</table>
+
+<br>
+<hr>
+<p style="color: #888; font-size: 12px;">Documentacao gerada em Marco 2026 | <a href="https://github.com/GCintra00/formatei-pc" style="color: #888;">GCintra00/formatei-pc</a></p>
+
+</body>
+</html>

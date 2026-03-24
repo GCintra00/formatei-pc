@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formatei o PC e Agora?</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0a0a0f;
+            --surface: #12121a;
+            --surface-2: #1a1a2e;
+            --border: #2a2a3e;
+            --text: #e4e4ef;
+            --text-muted: #8888a0;
+            --accent: #6c5ce7;
+            --accent-light: #a29bfe;
+            --green: #00e676;
+            --green-dim: #00c853;
+            --red: #ff5252;
+            --yellow: #ffd740;
+            --blue: #448aff;
+            --cyan: #18ffff;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Hero */
+        .hero {
+            position: relative;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(ellipse at 30% 50%, rgba(108, 92, 231, 0.15) 0%, transparent 50%),
+                        radial-gradient(ellipse at 70% 50%, rgba(0, 230, 118, 0.08) 0%, transparent 50%);
+            animation: pulse 8s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1) rotate(0deg); }
+            100% { transform: scale(1.05) rotate(2deg); }
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero h1 {
+            font-size: clamp(2.5rem, 6vw, 4.5rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #fff 0%, var(--accent-light) 50%, var(--green) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero .subtitle {
+            font-size: 1.25rem;
+            color: var(--text-muted);
+            font-weight: 300;
+            margin-bottom: 2.5rem;
+        }
+
+        .hero .badge {
+            display: inline-block;
+            padding: 0.4rem 1rem;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            font-size: 0.85rem;
+            color: var(--accent-light);
+            margin-bottom: 1.5rem;
+        }
+
+        .command-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.25rem 2rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.95rem;
+            color: var(--green);
+            max-width: 700px;
+            margin: 0 auto 1rem;
+            position: relative;
+            text-align: left;
+            word-break: break-all;
+        }
+
+        .command-box .prompt {
+            color: var(--accent-light);
+            user-select: none;
+        }
+
+        .command-box .copy-btn {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 0.35rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .command-box .copy-btn:hover {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+
+        .hero-note {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+
+        .scroll-indicator {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: bounce 2s infinite;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(10px); }
+        }
+
+        /* Main content */
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        /* Flow section */
+        .flow-section {
+            padding: 5rem 0;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .section-subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 4rem;
+            font-size: 1rem;
+        }
+
+        /* Timeline */
+        .timeline {
+            position: relative;
+            padding-left: 0;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 28px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to bottom, var(--accent), var(--green), var(--accent));
+            opacity: 0.3;
+        }
+
+        .step {
+            position: relative;
+            padding-left: 76px;
+            margin-bottom: 3rem;
+        }
+
+        .step-number {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 56px;
+            height: 56px;
+            background: var(--surface-2);
+            border: 2px solid var(--border);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent-light);
+            z-index: 1;
+        }
+
+        .step:hover .step-number {
+            border-color: var(--accent);
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 0 20px rgba(108, 92, 231, 0.4);
+            transition: all 0.3s;
+        }
+
+        .step-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            transition: all 0.3s;
+        }
+
+        .step-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(108, 92, 231, 0.1);
+        }
+
+        .step-card h3 {
+            font-size: 1.35rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .step-card h3 .icon {
+            font-size: 1.5rem;
+        }
+
+        .step-card p {
+            color: var(--text-muted);
+            margin-bottom: 1.25rem;
+            font-size: 0.95rem;
+        }
+
+        /* Tags */
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .tag {
+            padding: 0.3rem 0.75rem;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            border: 1px solid;
+        }
+
+        .tag-remove {
+            background: rgba(255, 82, 82, 0.1);
+            color: var(--red);
+            border-color: rgba(255, 82, 82, 0.2);
+        }
+
+        .tag-install {
+            background: rgba(0, 230, 118, 0.1);
+            color: var(--green);
+            border-color: rgba(0, 230, 118, 0.2);
+        }
+
+        .tag-download {
+            background: rgba(68, 138, 255, 0.1);
+            color: var(--blue);
+            border-color: rgba(68, 138, 255, 0.2);
+        }
+
+        .tag-config {
+            background: rgba(108, 92, 231, 0.1);
+            color: var(--accent-light);
+            border-color: rgba(108, 92, 231, 0.2);
+        }
+
+        .tag-manual {
+            background: rgba(255, 215, 64, 0.1);
+            color: var(--yellow);
+            border-color: rgba(255, 215, 64, 0.2);
+        }
+
+        /* Tables */
+        .table-wrapper {
+            overflow-x: auto;
+            margin-top: 1rem;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        thead {
+            background: var(--surface-2);
+        }
+
+        th {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        td {
+            padding: 0.65rem 1rem;
+            border-top: 1px solid var(--border);
+        }
+
+        tr:hover td {
+            background: rgba(108, 92, 231, 0.03);
+        }
+
+        .status-auto {
+            color: var(--green);
+            font-weight: 500;
+        }
+
+        .status-manual {
+            color: var(--yellow);
+            font-weight: 500;
+        }
+
+        /* Grid cards */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .mini-card {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem 1.25rem;
+            transition: all 0.2s;
+        }
+
+        .mini-card:hover {
+            border-color: var(--accent);
+        }
+
+        .mini-card .mc-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .mini-card .mc-desc {
+            color: var(--text-muted);
+            font-size: 0.82rem;
+        }
+
+        /* Sounds section */
+        .sounds-visual {
+            display: flex;
+            gap: 2rem;
+            margin-top: 1.25rem;
+            flex-wrap: wrap;
+        }
+
+        .sound-item {
+            flex: 1;
+            min-width: 200px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            text-align: center;
+        }
+
+        .sound-item .sound-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .sound-item .sound-name {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .sound-item .sound-event {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* Kept items */
+        .kept-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .kept-item {
+            background: var(--surface-2);
+            border: 1px solid rgba(0, 230, 118, 0.15);
+            border-radius: 10px;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .kept-item .kept-check {
+            color: var(--green);
+            font-size: 1.25rem;
+            flex-shrink: 0;
+        }
+
+        .kept-item .kept-info .kept-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .kept-item .kept-info .kept-reason {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        /* Release section */
+        .release-section {
+            padding: 5rem 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .file-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 0.75rem;
+            margin-top: 2rem;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.88rem;
+            transition: all 0.2s;
+        }
+
+        .file-item:hover {
+            border-color: var(--accent);
+        }
+
+        .file-icon {
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        .file-name {
+            font-family: 'Courier New', monospace;
+            font-size: 0.82rem;
+            color: var(--text);
+        }
+
+        .file-type {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        /* Notes section */
+        .notes-section {
+            padding: 5rem 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .note-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.25rem;
+            margin-top: 2rem;
+        }
+
+        .note-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .note-card .note-icon {
+            font-size: 1.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .note-card h4 {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .note-card p {
+            color: var(--text-muted);
+            font-size: 0.88rem;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        footer a {
+            color: var(--accent-light);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .timeline::before {
+                left: 20px;
+            }
+            .step {
+                padding-left: 60px;
+            }
+            .step-number {
+                width: 42px;
+                height: 42px;
+                font-size: 0.9rem;
+            }
+            .step-card {
+                padding: 1.5rem;
+            }
+            .sounds-visual {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="badge">PowerShell &bull; Windows 10 & 11</div>
+            <h1>Formatei o PC</h1>
+            <p class="subtitle">E agora o que fazer? Um script que faz tudo por voce.</p>
+            <div class="command-box">
+                <span class="prompt">PS&gt; </span>irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex
+                <button class="copy-btn" onclick="copyCommand()">Copiar</button>
+            </div>
+            <p class="hero-note">Executar no PowerShell como Administrador</p>
+        </div>
+        <div class="scroll-indicator">&darr;</div>
+    </section>
+
+    <!-- Etapas -->
+    <section class="flow-section">
+        <div class="container">
+            <h2 class="section-title">8 Etapas Automatizadas</h2>
+            <p class="section-subtitle">Do bloatware ao desktop limpo em um unico comando</p>
+
+            <div class="timeline">
+
+                <!-- Etapa 1 -->
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-card">
+                        <h3><span class="icon">&#128465;</span> Remover Bloatware</h3>
+                        <p>Remove todos os aplicativos pre-instalados desnecessarios do Windows, incluindo McAfee, OneDrive, Teams, apps Xbox, redes sociais e jogos.</p>
+                        <div class="tags">
+                            <span class="tag tag-remove">McAfee</span>
+                            <span class="tag tag-remove">OneDrive</span>
+                            <span class="tag tag-remove">Teams</span>
+                            <span class="tag tag-remove">Xbox</span>
+                            <span class="tag tag-remove">Spotify</span>
+                            <span class="tag tag-remove">Candy Crush</span>
+                            <span class="tag tag-remove">TikTok</span>
+                            <span class="tag tag-remove">Facebook</span>
+                            <span class="tag tag-remove">Instagram</span>
+                            <span class="tag tag-remove">Disney+</span>
+                            <span class="tag tag-remove">Clipchamp</span>
+                            <span class="tag tag-remove">Bing News</span>
+                            <span class="tag tag-remove">Solitaire</span>
+                            <span class="tag tag-remove">Skype</span>
+                            <span class="tag tag-remove">LinkedIn</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Etapa 2 -->
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-card">
+                        <h3><span class="icon">&#128230;</span> Instalar Programas (Winget)</h3>
+                        <p>Instala automaticamente 12 programas via Winget (modo silencioso) + AnyDesk via download direto.</p>
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Programa</th>
+                                        <th>ID</th>
+                                        <th>Modo</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td>Google Chrome</td><td><code>Google.Chrome</code></td><td class="status-auto">Automatico</td></tr>
+                                    <tr><td>Discord</td><td><code>Discord.Discord</code></td><td class="status-auto">Automatico</td></tr>
+                                    <tr><td>Steam</td><td><code>Valve.Steam</code></td><td class="status-auto">Automatico</td></tr>
+                                    <tr><td>Epic Games</td><td><code>EpicGames.EpicGamesLauncher</code></td><td class="status-auto">Automatico</td></tr>
+                                    <tr><td>Opera GX</td><td><code>Opera.OperaGX</code></td><td class="status-auto">Automatico</td></tr>
+                                    <tr><td>Bambu Studio</td><td><code>Bambulab.Bambustudio</code></td><td class="status-auto">Automatico</td></tr>
+                                    <tr><td>Logitech G Hub</td><td><code>Logitech.GHUB</code></td><td class="status-auto">Automatico</td></tr>
+                                    <tr><td>Lightshot</td><td><code>Skillbrains.Lightshot</code></td><td class="status-auto">Automatico</td></tr>
+                                    <tr><td>Calibre</td><td><code>calibre.calibre</code></td><td class="status-auto">Automatico</td></tr>
+                                    <tr><td>HakuNeko</td><td><code>HakuNeko.HakuNeko</code></td><td class="status-auto">Automatico</td></tr>
+                                    <tr><td>KCC</td><td><code>ciromattia.KCC</code></td><td class="status-auto">Automatico</td></tr>
+                                    <tr><td>Kindle Previewer</td><td><code>Amazon.KindlePreviewer</code></td><td class="status-auto">Automatico</td></tr>
+                                    <tr><td>AnyDesk</td><td>GitHub Release</td><td class="status-manual">Clique manual</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Etapa 3 -->
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-card">
+                        <h3><span class="icon">&#128268;</span> Instalar via Release</h3>
+                        <p>Programas que nao funcionam pelo Winget sao baixados da release v1.0 do repositorio.</p>
+                        <div class="card-grid">
+                            <div class="mini-card">
+                                <div class="mc-title">WinRAR 7.11 BR</div>
+                                <div class="mc-desc">Instalacao silenciosa (/S)</div>
+                            </div>
+                            <div class="mini-card">
+                                <div class="mc-title">STL Thumb</div>
+                                <div class="mc-desc">Thumbnails de STL no Explorer</div>
+                            </div>
+                            <div class="mini-card">
+                                <div class="mc-title">uTorrent Web</div>
+                                <div class="mc-desc status-manual">Manual: Next &gt; Agree &gt; Skip All &gt; Finish</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Etapa 4 -->
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-card">
+                        <h3><span class="icon">&#128193;</span> Baixar Arquivos Extras</h3>
+                        <p>Cria a pasta <strong>Downloads Setup</strong> na Area de Trabalho com drivers, softwares de teclado e atalhos.</p>
+                        <div class="card-grid">
+                            <div class="mini-card">
+                                <div class="mc-title">K585 DITI half hand</div>
+                                <div class="mc-desc">Software do teclado mecanico</div>
+                            </div>
+                            <div class="mini-card">
+                                <div class="mc-title">Kurama K552RGB</div>
+                                <div class="mc-desc">Software e reset do teclado</div>
+                            </div>
+                            <div class="mini-card">
+                                <div class="mc-title">Wallpaper Opera</div>
+                                <div class="mc-desc">Wallpaper para o Opera GX</div>
+                            </div>
+                            <div class="mini-card">
+                                <div class="mc-title">NVIDIA Drivers</div>
+                                <div class="mc-desc">Atalho URL para download</div>
+                            </div>
+                            <div class="mini-card">
+                                <div class="mc-title">WinKeygen</div>
+                                <div class="mc-desc">Ativador do Windows</div>
+                            </div>
+                            <div class="mini-card">
+                                <div class="mc-title">Pasta Kindle</div>
+                                <div class="mc-desc">Atalhos: Calibre, HakuNeko, KCC, Kindle Previewer</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Etapa 5 -->
+                <div class="step">
+                    <div class="step-number">5</div>
+                    <div class="step-card">
+                        <h3><span class="icon">&#127912;</span> Wallpaper e Sons</h3>
+                        <p>Aplica o wallpaper automaticamente e configura sons personalizados para conexao/desconexao de dispositivos USB.</p>
+                        <div class="sounds-visual">
+                            <div class="sound-item">
+                                <div class="sound-icon">&#128267;</div>
+                                <div class="sound-name">Yamete Kudasai</div>
+                                <div class="sound-event">USB conectado</div>
+                            </div>
+                            <div class="sound-item">
+                                <div class="sound-icon">&#128263;</div>
+                                <div class="sound-name">Kyaa</div>
+                                <div class="sound-event">USB desconectado</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Etapa 6 -->
+                <div class="step">
+                    <div class="step-number">6</div>
+                    <div class="step-card">
+                        <h3><span class="icon">&#128263;</span> Desativar Notificacoes</h3>
+                        <p>Desativa <strong>todas</strong> as notificacoes do Windows via multiplas chaves de registro e politicas de grupo.</p>
+                        <div class="tags">
+                            <span class="tag tag-config">Toasts</span>
+                            <span class="tag tag-config">Sons</span>
+                            <span class="tag tag-config">Central de Notificacoes</span>
+                            <span class="tag tag-config">Tela de Bloqueio</span>
+                            <span class="tag tag-config">Sugestoes</span>
+                            <span class="tag tag-config">Dicas do Windows</span>
+                            <span class="tag tag-config">Politica de Grupo</span>
+                            <span class="tag tag-config">Consumer Features</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Etapa 7 -->
+                <div class="step">
+                    <div class="step-number">7</div>
+                    <div class="step-card">
+                        <h3><span class="icon">&#9776;</span> Limpar Barra de Tarefas</h3>
+                        <p>Remove todos os icones desnecessarios da barra de tarefas, limpa o Menu Iniciar e tenta fixar os programas principais.</p>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1rem;">
+                            <div>
+                                <h4 style="color: var(--red); font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.5rem;">Remove</h4>
+                                <div class="tags">
+                                    <span class="tag tag-remove">Cortana</span>
+                                    <span class="tag tag-remove">Widgets</span>
+                                    <span class="tag tag-remove">Chat/Teams</span>
+                                    <span class="tag tag-remove">Task View</span>
+                                    <span class="tag tag-remove">Busca</span>
+                                    <span class="tag tag-remove">Noticias</span>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 style="color: var(--green); font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.5rem;">Fixa na Barra</h4>
+                                <div class="tags">
+                                    <span class="tag tag-install">Opera GX</span>
+                                    <span class="tag tag-install">Chrome</span>
+                                    <span class="tag tag-install">Explorador</span>
+                                </div>
+                            </div>
+                        </div>
+                        <p style="margin-top: 1rem; font-size: 0.82rem; color: var(--yellow);">&#9888; No Windows 11, fixar programas na barra via script nao funciona (limitacao Microsoft). Fazer manualmente.</p>
+                    </div>
+                </div>
+
+                <!-- Etapa 8 -->
+                <div class="step">
+                    <div class="step-number">8</div>
+                    <div class="step-card">
+                        <h3><span class="icon">&#9889;</span> Limpar Auto-Inicio</h3>
+                        <p>Remove <strong>todos</strong> os programas do inicio automatico, mantendo apenas os essenciais. Limpeza em multiplas camadas.</p>
+                        <h4 style="color: var(--green); font-size: 0.85rem; text-transform: uppercase; margin: 1rem 0 0.75rem;">Programas mantidos</h4>
+                        <div class="kept-grid">
+                            <div class="kept-item">
+                                <div class="kept-check">&#10003;</div>
+                                <div class="kept-info">
+                                    <div class="kept-name">AnyDesk (--control)</div>
+                                    <div class="kept-reason">Acesso remoto em segundo plano</div>
+                                </div>
+                            </div>
+                            <div class="kept-item">
+                                <div class="kept-check">&#10003;</div>
+                                <div class="kept-info">
+                                    <div class="kept-name">Lightshot</div>
+                                    <div class="kept-reason">Screenshots rapidos</div>
+                                </div>
+                            </div>
+                            <div class="kept-item">
+                                <div class="kept-check">&#10003;</div>
+                                <div class="kept-info">
+                                    <div class="kept-name">SecurityHealth</div>
+                                    <div class="kept-reason">Windows Defender</div>
+                                </div>
+                            </div>
+                            <div class="kept-item">
+                                <div class="kept-check">&#10003;</div>
+                                <div class="kept-info">
+                                    <div class="kept-name">RtkAudUService</div>
+                                    <div class="kept-reason">Driver de audio Realtek</div>
+                                </div>
+                            </div>
+                        </div>
+                        <h4 style="color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; margin: 1.25rem 0 0.5rem;">Camadas de limpeza</h4>
+                        <div class="tags">
+                            <span class="tag tag-config">Registro HKCU\Run</span>
+                            <span class="tag tag-config">Registro HKLM\Run</span>
+                            <span class="tag tag-config">Pasta Startup</span>
+                            <span class="tag tag-config">Common Startup</span>
+                            <span class="tag tag-config">StartupApproved</span>
+                            <span class="tag tag-config">Tarefas Agendadas</span>
+                            <span class="tag tag-config">Discord settings.json</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Release Files -->
+    <section class="release-section">
+        <div class="container">
+            <h2 class="section-title">Release v1.0</h2>
+            <p class="section-subtitle">Arquivos hospedados no GitHub Release</p>
+            <div class="file-list">
+                <div class="file-item">
+                    <span class="file-icon">&#128187;</span>
+                    <div>
+                        <div class="file-name">AnyDesk.exe</div>
+                        <div class="file-type">Instalador</div>
+                    </div>
+                </div>
+                <div class="file-item">
+                    <span class="file-icon">&#128187;</span>
+                    <div>
+                        <div class="file-name">winrar-x64-711br.exe</div>
+                        <div class="file-type">Instalador</div>
+                    </div>
+                </div>
+                <div class="file-item">
+                    <span class="file-icon">&#128187;</span>
+                    <div>
+                        <div class="file-name">STL-Thumb-Windows_0.5.0.exe</div>
+                        <div class="file-type">Instalador</div>
+                    </div>
+                </div>
+                <div class="file-item">
+                    <span class="file-icon">&#128187;</span>
+                    <div>
+                        <div class="file-name">utweb_installer.exe</div>
+                        <div class="file-type">Instalador</div>
+                    </div>
+                </div>
+                <div class="file-item">
+                    <span class="file-icon">&#128230;</span>
+                    <div>
+                        <div class="file-name">WinKeygen.rar</div>
+                        <div class="file-type">Utilitario</div>
+                    </div>
+                </div>
+                <div class="file-item">
+                    <span class="file-icon">&#9000;</span>
+                    <div>
+                        <div class="file-name">K585.DITI.half.hand.zip</div>
+                        <div class="file-type">Software teclado</div>
+                    </div>
+                </div>
+                <div class="file-item">
+                    <span class="file-icon">&#9000;</span>
+                    <div>
+                        <div class="file-name">Kurama.Software.e.reset.K552RGB-BRS.rar</div>
+                        <div class="file-type">Software teclado</div>
+                    </div>
+                </div>
+                <div class="file-item">
+                    <span class="file-icon">&#127748;</span>
+                    <div>
+                        <div class="file-name">wallpaper.windows.jpg</div>
+                        <div class="file-type">Imagem</div>
+                    </div>
+                </div>
+                <div class="file-item">
+                    <span class="file-icon">&#127748;</span>
+                    <div>
+                        <div class="file-name">wallpaper.opera.jpg</div>
+                        <div class="file-type">Imagem</div>
+                    </div>
+                </div>
+                <div class="file-item">
+                    <span class="file-icon">&#128266;</span>
+                    <div>
+                        <div class="file-name">Yamete.Kudasai.wav</div>
+                        <div class="file-type">Som USB conectar</div>
+                    </div>
+                </div>
+                <div class="file-item">
+                    <span class="file-icon">&#128266;</span>
+                    <div>
+                        <div class="file-name">Kyaa.wav</div>
+                        <div class="file-type">Som USB desconectar</div>
+                    </div>
+                </div>
+                <div class="file-item">
+                    <span class="file-icon">&#128279;</span>
+                    <div>
+                        <div class="file-name">Abrir_NVIDIA_Drivers.url</div>
+                        <div class="file-type">Atalho web</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Notes -->
+    <section class="notes-section">
+        <div class="container">
+            <h2 class="section-title">Notas Tecnicas</h2>
+            <p class="section-subtitle">Decisoes e limitacoes do script</p>
+            <div class="note-cards">
+                <div class="note-card">
+                    <div class="note-icon">&#127760;</div>
+                    <h4>DNS Google</h4>
+                    <p>O script configura automaticamente o DNS para 8.8.8.8 / 8.8.4.4 em todos os adaptadores ativos antes de comecar.</p>
+                </div>
+                <div class="note-card">
+                    <div class="note-icon">&#128230;</div>
+                    <h4>WinRAR via Release</h4>
+                    <p>Winget dava erro na instalacao do WinRAR, entao o instalador e baixado diretamente da release do GitHub.</p>
+                </div>
+                <div class="note-card">
+                    <div class="note-icon">&#128065;</div>
+                    <h4>AnyDesk Manual</h4>
+                    <p>Precisa de clique manual para instalar como servico. O script abre o instalador e espera voce fechar.</p>
+                </div>
+                <div class="note-card">
+                    <div class="note-icon">&#9888;</div>
+                    <h4>Barra Win 11</h4>
+                    <p>Fixar programas na barra de tarefas via script nao funciona de forma confiavel no Windows 11. Fazer manualmente.</p>
+                </div>
+                <div class="note-card">
+                    <div class="note-icon">&#128194;</div>
+                    <h4>Explorer nao reinicia</h4>
+                    <p>O Explorer nao e reiniciado no final para evitar abrir uma janela indesejada. Mudancas aplicam no proximo reinicio.</p>
+                </div>
+                <div class="note-card">
+                    <div class="note-icon">&#10060;</div>
+                    <h4>Fusion 360 removido</h4>
+                    <p>Removido do script pois tem atualizacoes frequentes e a licenca pessoal precisa ser baixada na hora.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <p>Feito por <a href="https://github.com/GCintra00" target="_blank">GCintra00</a> &bull; <a href="https://github.com/GCintra00/formatei-pc" target="_blank">Ver no GitHub</a></p>
+    </footer>
+
+    <script>
+        function copyCommand() {
+            const cmd = 'irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex';
+            navigator.clipboard.writeText(cmd).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                btn.textContent = 'Copiado!';
+                btn.style.background = '#00e676';
+                btn.style.color = '#000';
+                btn.style.borderColor = '#00e676';
+                setTimeout(() => {
+                    btn.textContent = 'Copiar';
+                    btn.style.background = '';
+                    btn.style.color = '';
+                    btn.style.borderColor = '';
+                }, 2000);
+            });
+        }
+
+        // Fade in on scroll
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.step, .file-item, .note-card').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(20px)';
+            el.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+            observer.observe(el);
+        });
+    </script>
+
+</body>
+</html>
