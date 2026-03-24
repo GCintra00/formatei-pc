@@ -23,7 +23,7 @@ $desktop = [Environment]::GetFolderPath("Desktop")
 $etapaTotal = 8
 $erros = @()
 $instalados = @()
-$ghRelease = "https://github.com/igcintra/formatei-pc/releases/download/v1.0"
+$ghRelease = "https://github.com/GCintra00/formatei-pc/releases/download/v1.0"
 
 Write-Host ""
 Write-Host "=========================================" -ForegroundColor Cyan
