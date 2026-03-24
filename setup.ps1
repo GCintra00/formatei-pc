@@ -644,12 +644,21 @@ foreach ($adPath in $anydeskPaths) {
     }
 }
 
-# Limpar pasta Startup (tudo)
+# Limpar pasta Startup do usuario (tudo)
 $startupFolder = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 if (Test-Path $startupFolder) {
     Get-ChildItem $startupFolder -ErrorAction SilentlyContinue | ForEach-Object {
         Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
         Write-Host "  Removido Startup: $($_.Name)" -ForegroundColor Green
+    }
+}
+
+# Limpar pasta Common Startup (todos os usuarios) - remover AnyDesk duplicado
+$commonStartup = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Startup"
+if (Test-Path $commonStartup) {
+    Get-ChildItem $commonStartup -ErrorAction SilentlyContinue | ForEach-Object {
+        Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+        Write-Host "  Removido Common Startup: $($_.Name)" -ForegroundColor Green
     }
 }
 
