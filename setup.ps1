@@ -521,53 +521,100 @@ try {
 
 Write-Host "`n[8/$etapaTotal] Removendo programas do inicio automatico..." -ForegroundColor Cyan
 
-# Programas para remover do auto-inicio (manter AnyDesk)
-$autoStartRemove = @("Discord", "Steam", "Epic Games", "Opera", "Bambu", "Logitech", "Lightshot", "uTorrent", "Spotify", "Microsoft Edge", "Teams")
+# Itens que DEVEM permanecer no auto-inicio
+$manter = @("SecurityHealth", "RtkAudUService")
 
-# Limpar registro HKCU Run
+# Limpar HKCU Run (remover TUDO exceto os mantidos)
 $regRun = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 if (Test-Path $regRun) {
     $entries = Get-ItemProperty $regRun -ErrorAction SilentlyContinue
     foreach ($prop in $entries.PSObject.Properties) {
-        if ($prop.Name -match "PS" -or $prop.Name -eq "(default)") { continue }
-        foreach ($pattern in $autoStartRemove) {
-            if ($prop.Name -like "*$pattern*" -or $prop.Value -like "*$pattern*") {
-                Remove-ItemProperty -Path $regRun -Name $prop.Name -ErrorAction SilentlyContinue
-                Write-Host "  Removido: $($prop.Name)" -ForegroundColor Green
-            }
+        if ($prop.Name -match "^PS" -or $prop.Name -eq "(default)") { continue }
+        $keep = $false
+        foreach ($m in $manter) { if ($prop.Name -like "*$m*") { $keep = $true } }
+        if (-not $keep) {
+            Remove-ItemProperty -Path $regRun -Name $prop.Name -ErrorAction SilentlyContinue
+            Write-Host "  Removido HKCU: $($prop.Name)" -ForegroundColor Green
         }
     }
 }
 
-# Limpar registro HKLM Run (exceto AnyDesk)
+# Limpar HKLM Run (remover TUDO exceto mantidos, corrigir AnyDesk)
 $regRunLM = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"
 if (Test-Path $regRunLM) {
     $entries = Get-ItemProperty $regRunLM -ErrorAction SilentlyContinue
     foreach ($prop in $entries.PSObject.Properties) {
-        if ($prop.Name -match "PS" -or $prop.Name -eq "(default)") { continue }
-        foreach ($pattern in $autoStartRemove) {
-            if ($prop.Name -like "*$pattern*" -or $prop.Value -like "*$pattern*") {
-                Remove-ItemProperty -Path $regRunLM -Name $prop.Name -ErrorAction SilentlyContinue
-                Write-Host "  Removido: $($prop.Name)" -ForegroundColor Green
-            }
+        if ($prop.Name -match "^PS" -or $prop.Name -eq "(default)") { continue }
+        $keep = $false
+        foreach ($m in $manter) { if ($prop.Name -like "*$m*") { $keep = $true } }
+        if ($prop.Name -like "*AnyDesk*") { $keep = $true }
+        if (-not $keep) {
+            Remove-ItemProperty -Path $regRunLM -Name $prop.Name -ErrorAction SilentlyContinue
+            Write-Host "  Removido HKLM: $($prop.Name)" -ForegroundColor Green
         }
     }
 }
 
-# Limpar pasta Startup
+# Corrigir AnyDesk para executar em segundo plano (--control)
+$anydeskPaths = @(
+    "$env:ProgramFiles\AnyDesk\AnyDesk.exe",
+    "${env:ProgramFiles(x86)}\AnyDesk\AnyDesk.exe"
+)
+foreach ($adPath in $anydeskPaths) {
+    if (Test-Path $adPath) {
+        Set-ItemProperty -Path $regRunLM -Name "AnyDesk" -Value "`"$adPath`" --control" -ErrorAction SilentlyContinue
+        Write-Host "  AnyDesk configurado em segundo plano (--control)" -ForegroundColor Green
+        break
+    }
+}
+
+# Limpar pasta Startup (tudo)
 $startupFolder = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 if (Test-Path $startupFolder) {
     Get-ChildItem $startupFolder -ErrorAction SilentlyContinue | ForEach-Object {
+        Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+        Write-Host "  Removido Startup: $($_.Name)" -ForegroundColor Green
+    }
+}
+
+# Desativar auto-inicio via Task Manager (Approved entries)
+$regApproved = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+if (Test-Path $regApproved) {
+    $entries = Get-Item $regApproved -ErrorAction SilentlyContinue
+    foreach ($name in $entries.GetValueNames()) {
         $keep = $false
-        if ($_.Name -like "*AnyDesk*") { $keep = $true }
-        if (-not $keep) {
-            Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
-            Write-Host "  Removido: $($_.Name)" -ForegroundColor Green
+        foreach ($m in $manter) { if ($name -like "*$m*") { $keep = $true } }
+        if ($name -like "*AnyDesk*") { $keep = $true }
+        if (-not $keep -and $name -ne "(default)") {
+            # Desativar setando os primeiros bytes para 03 (disabled)
+            $bytes = [byte[]](0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+            Set-ItemProperty -Path $regApproved -Name $name -Value $bytes -Type Binary -ErrorAction SilentlyContinue
+            Write-Host "  Desativado: $name" -ForegroundColor Green
         }
     }
 }
 
-Write-Host "  Auto-inicio limpo (AnyDesk mantido)" -ForegroundColor Green
+# Mesmo para HKLM
+$regApprovedLM = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+if (Test-Path $regApprovedLM) {
+    $entries = Get-Item $regApprovedLM -ErrorAction SilentlyContinue
+    foreach ($name in $entries.GetValueNames()) {
+        $keep = $false
+        foreach ($m in $manter) { if ($name -like "*$m*") { $keep = $true } }
+        if ($name -like "*AnyDesk*") { $keep = $true }
+        if (-not $keep -and $name -ne "(default)") {
+            $bytes = [byte[]](0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+            Set-ItemProperty -Path $regApprovedLM -Name $name -Value $bytes -Type Binary -ErrorAction SilentlyContinue
+            Write-Host "  Desativado HKLM: $name" -ForegroundColor Green
+        }
+    }
+}
+
+# Remover OneDrive do auto-inicio (persistente)
+Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "OneDrive" -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "OneDriveSetup" -ErrorAction SilentlyContinue
+
+Write-Host "  Auto-inicio limpo (AnyDesk em segundo plano)" -ForegroundColor Green
 
 # Reiniciar Explorer para aplicar mudancas na barra de tarefas
 Stop-Process -Name "explorer" -Force -ErrorAction SilentlyContinue
