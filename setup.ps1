@@ -256,28 +256,20 @@ try {
 Write-Host "`n[4/$etapaTotal] Baixando arquivos extras..." -ForegroundColor Cyan
 
 $arquivos = @(
-    "K585 DITI half hand.zip",
-    "Kurama Software e reset K552RGB-BRS.rar",
-    "wallpaper opera.jpg",
-    "Abrir_NVIDIA_Drivers.url"
+    @{ url = "K585.DITI.half.hand.zip";                nome = "K585 DITI half hand.zip" },
+    @{ url = "Kurama.Software.e.reset.K552RGB-BRS.rar"; nome = "Kurama Software e reset K552RGB-BRS.rar" },
+    @{ url = "wallpaper.opera.jpg";                     nome = "wallpaper opera.jpg" },
+    @{ url = "Abrir_NVIDIA_Drivers.url";                nome = "Abrir_NVIDIA_Drivers.url" }
 )
 
 foreach ($arq in $arquivos) {
-    Write-Host "  $arq..." -ForegroundColor Yellow -NoNewline
+    Write-Host "  $($arq.nome)..." -ForegroundColor Yellow -NoNewline
     try {
-        $urlArq = "$ghRelease/$($arq -replace ' ','.')"
-        Invoke-WebRequest -Uri $urlArq -OutFile "$desktop\$arq" -ErrorAction Stop
+        Invoke-WebRequest -Uri "$ghRelease/$($arq.url)" -OutFile "$desktop\$($arq.nome)" -ErrorAction Stop
         Write-Host " OK" -ForegroundColor Green
     } catch {
-        # Tentar com encoding de URL
-        try {
-            $urlArq = "$ghRelease/$([Uri]::EscapeDataString($arq))"
-            Invoke-WebRequest -Uri $urlArq -OutFile "$desktop\$arq" -ErrorAction Stop
-            Write-Host " OK" -ForegroundColor Green
-        } catch {
-            Write-Host " ERRO" -ForegroundColor Red
-            $erros += $arq
-        }
+        Write-Host " ERRO" -ForegroundColor Red
+        $erros += $arq.nome
     }
 }
 
@@ -291,7 +283,7 @@ Write-Host "`n[5/$etapaTotal] Configurando personalizacao..." -ForegroundColor C
 Write-Host "  Wallpaper..." -ForegroundColor Yellow -NoNewline
 try {
     $wpPath = "$env:USERPROFILE\Pictures\wallpaper-windows.jpg"
-    Invoke-WebRequest -Uri "$ghRelease/wallpaper.windows.jpg" -OutFile $wpPath -ErrorAction Stop
+    Invoke-WebRequest -Uri "$ghRelease/wallpaper.windows.jpg" -OutFile $wpPath -UseBasicParsing -ErrorAction Stop
 
     # Aplicar wallpaper
     Add-Type -TypeDefinition @"
