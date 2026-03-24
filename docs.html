@@ -591,10 +591,16 @@
             <h1>Formatei o PC</h1>
             <p class="subtitle">E agora o que fazer? Um script que faz tudo por voce.</p>
             <div class="command-box">
-                <span class="prompt">PS&gt; </span>irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex
+                <span class="prompt">PS&gt; </span>Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex
                 <button class="copy-btn" onclick="copyCommand()">Copiar</button>
             </div>
             <p class="hero-note">Executar no PowerShell como Administrador</p>
+
+            <p style="color: var(--text-muted); margin-top: 2rem; font-size: 0.95rem;">Versao Light (so Chrome + limpezas):</p>
+            <div class="command-box" style="margin-top: 0.5rem;">
+                <span class="prompt">PS&gt; </span>Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex
+                <button class="copy-btn" onclick="copyLight()">Copiar</button>
+            </div>
         </div>
         <div class="scroll-indicator">&darr;</div>
     </section>
@@ -991,9 +997,27 @@
 
     <script>
         function copyCommand() {
-            const cmd = 'irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex';
+            const cmd = 'Get-NetAdapter | Where-Object {$_.Status -eq \'Up\'} | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses (\"8.8.8.8\",\"8.8.4.4\") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex';
             navigator.clipboard.writeText(cmd).then(() => {
                 const btn = document.querySelector('.copy-btn');
+                btn.textContent = 'Copiado!';
+                btn.style.background = '#00e676';
+                btn.style.color = '#000';
+                btn.style.borderColor = '#00e676';
+                setTimeout(() => {
+                    btn.textContent = 'Copiar';
+                    btn.style.background = '';
+                    btn.style.color = '';
+                    btn.style.borderColor = '';
+                }, 2000);
+            });
+        }
+
+        function copyLight() {
+            const cmd = 'Get-NetAdapter | Where-Object {$_.Status -eq \'Up\'} | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses (\"8.8.8.8\",\"8.8.4.4\") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex';
+            navigator.clipboard.writeText(cmd).then(() => {
+                const btns = document.querySelectorAll('.copy-btn');
+                const btn = btns[1];
                 btn.textContent = 'Copiado!';
                 btn.style.background = '#00e676';
                 btn.style.color = '#000';

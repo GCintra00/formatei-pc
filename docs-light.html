@@ -57,7 +57,7 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 
 <div class="step">
 <span class="step-number">2</span> Colar e executar o comando abaixo:
-<div class="comando">irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex</div>
+<div class="comando">Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex</div>
 </div>
 
 <div class="step">
@@ -69,7 +69,22 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 </div>
 
 <div class="sucesso">
-<strong>DNS automatico:</strong> O script configura o DNS para Google (8.8.8.8 / 8.8.4.4) antes de comecar.
+<strong>DNS automatico:</strong> O prefixo do comando configura o DNS do Google (8.8.8.8) <strong>antes</strong> de baixar o script, garantindo que o download funcione mesmo com DNS lento.
+</div>
+
+<h3>Versao Light (so Chrome + limpezas)</h3>
+
+<div class="step">
+<span class="step-number">1</span> Abrir o <strong>PowerShell como Administrador</strong>
+</div>
+
+<div class="step">
+<span class="step-number">2</span> Colar e executar:
+<div class="comando">Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex</div>
+</div>
+
+<div class="info">
+<strong>Diferenca:</strong> A versao light instala apenas o Google Chrome, mas executa todas as limpezas (bloatware, notificacoes, barra de tarefas, auto-inicio). Nenhum passo manual necessario.
 </div>
 
 <!-- ============================= -->

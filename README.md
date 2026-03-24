@@ -9,13 +9,19 @@ Script PowerShell que automatiza a configuracao de um PC Windows apos uma format
 ## Como Usar
 
 1. Abrir o **PowerShell como Administrador**
-2. Executar:
+2. Colar e executar o comando:
 
+### Setup Completo (8 etapas)
 ```powershell
-irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex
+Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex
 ```
 
-Ou clonar o repositorio e rodar `.\setup.ps1`.
+### Setup Light (5 etapas — so Chrome + limpezas)
+```powershell
+Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex
+```
+
+> O prefixo configura o DNS do Google (8.8.8.8) **antes** de baixar o script, garantindo que o download funcione mesmo em PCs recem-formatados com DNS lento.
 
 > O script exige permissoes de administrador. Se nao estiver rodando como admin, ele avisa e encerra.
 
