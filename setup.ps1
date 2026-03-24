@@ -307,7 +307,8 @@ $arquivos = @(
     @{ url = "K585.DITI.half.hand.zip";                nome = "K585 DITI half hand.zip" },
     @{ url = "Kurama.Software.e.reset.K552RGB-BRS.rar"; nome = "Kurama Software e reset K552RGB-BRS.rar" },
     @{ url = "wallpaper.opera.jpg";                     nome = "wallpaper opera.jpg" },
-    @{ url = "Abrir_NVIDIA_Drivers.url";                nome = "Abrir_NVIDIA_Drivers.url" }
+    @{ url = "Abrir_NVIDIA_Drivers.url";                nome = "Abrir_NVIDIA_Drivers.url" },
+    @{ url = "WinKeygen.rar";                           nome = "WinKeygen.rar" }
 )
 
 foreach ($arq in $arquivos) {
