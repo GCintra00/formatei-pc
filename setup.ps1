@@ -448,10 +448,12 @@ try {
     Set-ItemProperty -Path $regAdvanced -Name "ShowCortanaButton" -Value 0 -Type DWord -ErrorAction SilentlyContinue  # Cortana
 
     # Remover Noticias e Interesses / Tempo (Win 10)
-    $regFeeds = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Feeds"
-    if (-not (Test-Path $regFeeds)) { New-Item -Path $regFeeds -Force | Out-Null }
-    Set-ItemProperty -Path $regFeeds -Name "ShellFeedsTaskbarViewMode" -Value 2 -Type DWord  # 2 = oculto
-    Set-ItemProperty -Path $regFeeds -Name "IsFeedsAvailable" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    try {
+        $regFeeds = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Feeds"
+        New-Item -Path $regFeeds -Force -ErrorAction SilentlyContinue | Out-Null
+        New-ItemProperty -Path $regFeeds -Name "ShellFeedsTaskbarViewMode" -Value 2 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
+        New-ItemProperty -Path $regFeeds -Name "IsFeedsAvailable" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
+    } catch { }
 
     # Remover Widgets (Win 11) via politica
     $regWidgets = "HKLM:\SOFTWARE\Policies\Microsoft\Dsh"
@@ -547,9 +549,45 @@ try {
     $atalho.TargetPath = "explorer.exe"
     $atalho.Save()
 
-    Write-Host "  Barra limpa e configurada (Opera GX, Chrome, Explorador)" -ForegroundColor Green
+    # Fixar programas na barra via syspin/verb (funciona Win 10 e 11)
+    # Metodo: criar atalhos no desktop temporariamente e usar Shell verb para fixar
+    $shell = New-Object -ComObject Shell.Application
+
+    # Tentar fixar Opera GX
+    $operaPaths = @(
+        "$env:LOCALAPPDATA\Programs\Opera GX\opera.exe",
+        "$env:ProgramFiles\Opera GX\opera.exe",
+        "${env:ProgramFiles(x86)}\Opera GX\opera.exe"
+    )
+    foreach ($p in $operaPaths) {
+        if (Test-Path $p) {
+            $dir = $shell.Namespace((Split-Path $p))
+            $item = $dir.ParseName((Split-Path $p -Leaf))
+            $item.Verbs() | Where-Object { $_.Name -match "taskbar|barra de tarefas|Fixar na barra" } | ForEach-Object { $_.DoIt() }
+            Write-Host "  Fixado: Opera GX" -ForegroundColor Green
+            break
+        }
+    }
+
+    # Tentar fixar Chrome
+    $chromePath = "$env:ProgramFiles\Google\Chrome\Application\chrome.exe"
+    if (-not (Test-Path $chromePath)) { $chromePath = "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe" }
+    if (Test-Path $chromePath) {
+        $dir = $shell.Namespace((Split-Path $chromePath))
+        $item = $dir.ParseName((Split-Path $chromePath -Leaf))
+        $item.Verbs() | Where-Object { $_.Name -match "taskbar|barra de tarefas|Fixar na barra" } | ForEach-Object { $_.DoIt() }
+        Write-Host "  Fixado: Chrome" -ForegroundColor Green
+    }
+
+    # Tentar fixar Explorador de Arquivos
+    $explorerDir = $shell.Namespace("$env:WINDIR")
+    $explorerItem = $explorerDir.ParseName("explorer.exe")
+    $explorerItem.Verbs() | Where-Object { $_.Name -match "taskbar|barra de tarefas|Fixar na barra" } | ForEach-Object { $_.DoIt() }
+    Write-Host "  Fixado: Explorador de Arquivos" -ForegroundColor Green
+
+    Write-Host "  Barra limpa e configurada" -ForegroundColor Green
 } catch {
-    Write-Host "  ERRO" -ForegroundColor Red
+    Write-Host "  ERRO na barra: $_" -ForegroundColor Red
     $erros += "Barra de tarefas"
 }
 
@@ -560,7 +598,7 @@ try {
 Write-Host "`n[8/$etapaTotal] Removendo programas do inicio automatico..." -ForegroundColor Cyan
 
 # Itens que DEVEM permanecer no auto-inicio
-$manter = @("SecurityHealth", "RtkAudUService")
+$manter = @("SecurityHealth", "RtkAudUService", "Lightshot")
 
 # Limpar HKCU Run (remover TUDO exceto os mantidos)
 $regRun = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
@@ -652,7 +690,36 @@ if (Test-Path $regApprovedLM) {
 Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "OneDrive" -ErrorAction SilentlyContinue
 Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "OneDriveSetup" -ErrorAction SilentlyContinue
 
-Write-Host "  Auto-inicio limpo (AnyDesk em segundo plano)" -ForegroundColor Green
+# Discord: desativar auto-inicio na config do app (ele se auto-repara no registro)
+$discordSettings = "$env:APPDATA\discord\settings.json"
+if (Test-Path $discordSettings) {
+    try {
+        $json = Get-Content $discordSettings -Raw | ConvertFrom-Json
+        $json | Add-Member -NotePropertyName "OPEN_ON_STARTUP" -NotePropertyValue $false -Force
+        $json | Add-Member -NotePropertyName "START_MINIMIZED" -NotePropertyValue $true -Force
+        $json | ConvertTo-Json -Depth 10 | Set-Content $discordSettings -Encoding UTF8
+        Write-Host "  Discord auto-inicio desativado na config" -ForegroundColor Green
+    } catch { }
+}
+
+# Steam: desativar auto-inicio na config
+$steamCfg = "${env:ProgramFiles(x86)}\Steam\config\SteamAppData.vdf"
+# Remover via registro novamente (alguns apps recriam na primeira execucao)
+Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Discord" -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "com.squirrel.slack.slack" -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Steam" -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "EpicGamesLauncher" -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "LGHUB" -ErrorAction SilentlyContinue
+
+# Desativar tarefas agendadas de auto-inicio
+Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object {
+    $_.TaskName -match "Discord|Opera|Steam|Epic|Slack|OneDrive|Edge"
+} | ForEach-Object {
+    Disable-ScheduledTask -TaskName $_.TaskName -ErrorAction SilentlyContinue
+    Write-Host "  Tarefa desativada: $($_.TaskName)" -ForegroundColor Green
+}
+
+Write-Host "  Auto-inicio limpo (AnyDesk em segundo plano, Lightshot mantido)" -ForegroundColor Green
 
 # Reiniciar Explorer para aplicar mudancas na barra de tarefas
 Stop-Process -Name "explorer" -Force -ErrorAction SilentlyContinue
