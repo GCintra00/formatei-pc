@@ -711,20 +711,68 @@ Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" 
 Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "EpicGamesLauncher" -ErrorAction SilentlyContinue
 Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "LGHUB" -ErrorAction SilentlyContinue
 
-# Desativar tarefas agendadas de auto-inicio
+# Desativar TODAS as tarefas agendadas de logon (exceto do sistema)
+$tarefasManter = @("MicrosoftEdgeUpdateTask", "SecurityHealth", "Windows", "Microsoft\Windows")
 Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object {
-    $_.TaskName -match "Discord|Opera|Steam|Epic|Slack|OneDrive|Edge"
+    $_.Triggers | Where-Object { $_ -is [Microsoft.Management.Infrastructure.CimInstance] -and $_.CimClass.CimClassName -eq "MSFT_TaskLogonTrigger" }
 } | ForEach-Object {
-    Disable-ScheduledTask -TaskName $_.TaskName -ErrorAction SilentlyContinue
-    Write-Host "  Tarefa desativada: $($_.TaskName)" -ForegroundColor Green
+    $skip = $false
+    foreach ($m in $tarefasManter) { if ($_.TaskPath -like "*$m*") { $skip = $true } }
+    if (-not $skip) {
+        Disable-ScheduledTask -TaskName $_.TaskName -TaskPath $_.TaskPath -ErrorAction SilentlyContinue
+        Write-Host "  Tarefa desativada: $($_.TaskName)" -ForegroundColor Green
+    }
 }
 
-Write-Host "  Auto-inicio limpo (AnyDesk em segundo plano, Lightshot mantido)" -ForegroundColor Green
+# Desativar TODOS os itens do Gerenciador de Tarefas (Startup tab) exceto permitidos
+$permitidos = @("SecurityHealth", "RtkAudUService", "AnyDesk", "Lightshot")
+$disabledBytes = [byte[]](0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
 
-# Reiniciar Explorer para aplicar mudancas na barra de tarefas
-Stop-Process -Name "explorer" -Force -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 2
-Start-Process "explorer.exe"
+# StartupApproved HKCU
+$regApproved = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+if (Test-Path $regApproved) {
+    (Get-Item $regApproved).GetValueNames() | ForEach-Object {
+        if ($_ -eq "(default)") { return }
+        $permitido = $false
+        foreach ($p in $permitidos) { if ($_ -like "*$p*") { $permitido = $true } }
+        if (-not $permitido) {
+            Set-ItemProperty -Path $regApproved -Name $_ -Value $disabledBytes -Type Binary -ErrorAction SilentlyContinue
+            Write-Host "  Desativado startup: $_" -ForegroundColor Green
+        }
+    }
+}
+
+# StartupApproved HKLM
+$regApprovedLM = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+if (Test-Path $regApprovedLM) {
+    (Get-Item $regApprovedLM).GetValueNames() | ForEach-Object {
+        if ($_ -eq "(default)") { return }
+        $permitido = $false
+        foreach ($p in $permitidos) { if ($_ -like "*$p*") { $permitido = $true } }
+        if (-not $permitido) {
+            Set-ItemProperty -Path $regApprovedLM -Name $_ -Value $disabledBytes -Type Binary -ErrorAction SilentlyContinue
+            Write-Host "  Desativado startup HKLM: $_" -ForegroundColor Green
+        }
+    }
+}
+
+# StartupApproved\StartupFolder
+$regApprovedFolder = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder"
+if (Test-Path $regApprovedFolder) {
+    (Get-Item $regApprovedFolder).GetValueNames() | ForEach-Object {
+        if ($_ -eq "(default)") { return }
+        $permitido = $false
+        foreach ($p in $permitidos) { if ($_ -like "*$p*") { $permitido = $true } }
+        if (-not $permitido) {
+            Set-ItemProperty -Path $regApprovedFolder -Name $_ -Value $disabledBytes -Type Binary -ErrorAction SilentlyContinue
+            Write-Host "  Desativado startup folder: $_" -ForegroundColor Green
+        }
+    }
+}
+
+Write-Host "  Auto-inicio limpo (AnyDesk + Lightshot mantidos)" -ForegroundColor Green
+
+# Nao reiniciar Explorer (abre janela do explorador). Mudancas aplicam no proximo reinicio do PC.
 
 # ============================================
 # RESUMO FINAL
