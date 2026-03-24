@@ -218,7 +218,7 @@ Write-Host "`n[3/$etapaTotal] Instalando programas extras..." -ForegroundColor C
 Write-Host "  WinRAR..." -ForegroundColor Yellow -NoNewline
 try {
     $winrarInstaller = "$env:TEMP\winrar.exe"
-    Invoke-WebRequest -Uri "$ghRelease/winrar.exe" -OutFile $winrarInstaller -ErrorAction Stop
+    Invoke-WebRequest -Uri "$ghRelease/winrar-x64-711br.exe" -OutFile $winrarInstaller -ErrorAction Stop
     Start-Process $winrarInstaller -ArgumentList "/S" -Wait -ErrorAction SilentlyContinue
     Remove-Item $winrarInstaller -Force -ErrorAction SilentlyContinue
     Write-Host " OK" -ForegroundColor Green
