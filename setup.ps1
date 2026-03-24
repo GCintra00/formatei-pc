@@ -275,7 +275,9 @@ try {
 Write-Host "`n[4/$etapaTotal] Baixando arquivos extras..." -ForegroundColor Cyan
 
 # Criar pasta Kindle na Area de Trabalho e mover atalhos
-$kindleDir = "$desktop\Kindle"
+$dlDir = "$desktop\Downloads Setup"
+New-Item -ItemType Directory -Path $dlDir -Force | Out-Null
+$kindleDir = "$dlDir\Kindle"
 New-Item -ItemType Directory -Path $kindleDir -Force | Out-Null
 
 # Mover atalhos dos programas Kindle para a pasta
@@ -302,7 +304,10 @@ if ((Test-Path $calibreExe) -and -not (Test-Path "$kindleDir\Calibre*.lnk")) {
     Write-Host "  Kindle: Calibre.lnk" -ForegroundColor Green
 }
 
-# Arquivos extras para o Desktop
+# Criar pasta de downloads na Area de Trabalho
+$dlDir = "$desktop\Downloads Setup"
+New-Item -ItemType Directory -Path $dlDir -Force | Out-Null
+
 $arquivos = @(
     @{ url = "K585.DITI.half.hand.zip";                nome = "K585 DITI half hand.zip" },
     @{ url = "Kurama.Software.e.reset.K552RGB-BRS.rar"; nome = "Kurama Software e reset K552RGB-BRS.rar" },
@@ -314,7 +319,7 @@ $arquivos = @(
 foreach ($arq in $arquivos) {
     Write-Host "  $($arq.nome)..." -ForegroundColor Yellow -NoNewline
     try {
-        Invoke-WebRequest -Uri "$ghRelease/$($arq.url)" -OutFile "$desktop\$($arq.nome)" -ErrorAction Stop
+        Invoke-WebRequest -Uri "$ghRelease/$($arq.url)" -OutFile "$dlDir\$($arq.nome)" -ErrorAction Stop
         Write-Host " OK" -ForegroundColor Green
     } catch {
         Write-Host " ERRO" -ForegroundColor Red
@@ -399,7 +404,29 @@ try {
         Set-ItemProperty -Path $regSugest -Name "SoftLandingEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
     }
 
-    Write-Host "  Notificacoes desativadas" -ForegroundColor Green
+    # Desativar notificacoes de TODOS os apps
+    $regWPN = "HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications"
+    Set-ItemProperty -Path $regWPN -Name "DatabaseMigrationCompleted" -Value 1 -Type DWord -ErrorAction SilentlyContinue
+
+    # Desativar som de notificacao
+    $regNotifSettings = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings"
+    if (-not (Test-Path $regNotifSettings)) { New-Item -Path $regNotifSettings -Force | Out-Null }
+    Set-ItemProperty -Path $regNotifSettings -Name "NOC_GLOBAL_SETTING_ALLOW_NOTIFICATION_SOUND" -Value 0 -Type DWord
+    Set-ItemProperty -Path $regNotifSettings -Name "NOC_GLOBAL_SETTING_ALLOW_TOASTS_ABOVE_LOCK" -Value 0 -Type DWord
+    Set-ItemProperty -Path $regNotifSettings -Name "NOC_GLOBAL_SETTING_TOASTS_ENABLED" -Value 0 -Type DWord
+
+    # Desativar notificacoes via politica (mais agressivo)
+    $regPolicy = "HKCU:\Software\Policies\Microsoft\Windows\CurrentVersion\PushNotifications"
+    if (-not (Test-Path $regPolicy)) { New-Item -Path $regPolicy -Force | Out-Null }
+    Set-ItemProperty -Path $regPolicy -Name "NoToastApplicationNotification" -Value 1 -Type DWord
+
+    # Desativar Windows Tips/Sugestoes
+    $regTips = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent"
+    if (-not (Test-Path $regTips)) { New-Item -Path $regTips -Force | Out-Null }
+    Set-ItemProperty -Path $regTips -Name "DisableSoftLanding" -Value 1 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path $regTips -Name "DisableWindowsConsumerFeatures" -Value 1 -Type DWord -ErrorAction SilentlyContinue
+
+    Write-Host "  Todas as notificacoes desativadas" -ForegroundColor Green
 } catch {
     Write-Host "  ERRO" -ForegroundColor Red
     $erros += "Notificacoes"
@@ -412,26 +439,44 @@ try {
 Write-Host "`n[7/$etapaTotal] Configurando barra de tarefas..." -ForegroundColor Cyan
 
 try {
-    # Limpar todos os itens fixados da barra de tarefas
-    $taskbandPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband"
-    Remove-Item -Path $taskbandPath -Force -Recurse -ErrorAction SilentlyContinue
-    New-Item -Path $taskbandPath -Force | Out-Null
-
-    # Remover icones padrao da barra (Win 11)
     $regAdvanced = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-    Set-ItemProperty -Path $regAdvanced -Name "ShowTaskViewButton" -Value 0 -Type DWord -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path $regAdvanced -Name "TaskbarDa" -Value 0 -Type DWord -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path $regAdvanced -Name "TaskbarMn" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+    # Remover TODOS os icones do sistema da barra de tarefas
+    Set-ItemProperty -Path $regAdvanced -Name "ShowTaskViewButton" -Value 0 -Type DWord -ErrorAction SilentlyContinue  # Task View
+    Set-ItemProperty -Path $regAdvanced -Name "TaskbarDa" -Value 0 -Type DWord -ErrorAction SilentlyContinue          # Widgets
+    Set-ItemProperty -Path $regAdvanced -Name "TaskbarMn" -Value 0 -Type DWord -ErrorAction SilentlyContinue          # Chat/Teams
+    Set-ItemProperty -Path $regAdvanced -Name "ShowCortanaButton" -Value 0 -Type DWord -ErrorAction SilentlyContinue  # Cortana
 
     # Desativar busca na barra de tarefas
     $regSearch = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"
     if (-not (Test-Path $regSearch)) { New-Item -Path $regSearch -Force | Out-Null }
     Set-ItemProperty -Path $regSearch -Name "SearchboxTaskbarMode" -Value 0 -Type DWord
 
-    # Criar atalhos para fixar na barra
+    # Desativar Cortana via politica
+    $regCortana = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search"
+    if (-not (Test-Path $regCortana)) { New-Item -Path $regCortana -Force | Out-Null }
+    Set-ItemProperty -Path $regCortana -Name "AllowCortana" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+    # Limpar TODOS os itens fixados na barra de tarefas
     $pinDir = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+    if (Test-Path $pinDir) {
+        Remove-Item "$pinDir\*" -Force -ErrorAction SilentlyContinue
+    }
     New-Item -ItemType Directory -Path $pinDir -Force | Out-Null
 
+    # Limpar taskband do registro
+    $taskbandPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband"
+    Remove-Item -Path $taskbandPath -Force -Recurse -ErrorAction SilentlyContinue
+    New-Item -Path $taskbandPath -Force | Out-Null
+
+    # Desafixar Microsoft Edge e Microsoft Store da barra
+    $edgeAppId = "MSEdge"
+    $storeAppId = "Microsoft.WindowsStore"
+    # Remover via AppUserModelID
+    $regPins = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband\AuxilliaryPins"
+    Remove-Item -Path $regPins -Force -Recurse -ErrorAction SilentlyContinue
+
+    # Fixar programas na ordem: Opera GX, Chrome, Explorador
     # Opera GX
     $operaPaths = @(
         "$env:LOCALAPPDATA\Programs\Opera GX\opera.exe",
@@ -441,7 +486,7 @@ try {
     foreach ($p in $operaPaths) {
         if (Test-Path $p) {
             $shell = New-Object -ComObject WScript.Shell
-            $atalho = $shell.CreateShortcut("$pinDir\Opera GX.lnk")
+            $atalho = $shell.CreateShortcut("$pinDir\01-Opera GX.lnk")
             $atalho.TargetPath = $p
             $atalho.Save()
             break
@@ -453,19 +498,18 @@ try {
     if (-not (Test-Path $chromePath)) { $chromePath = "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe" }
     if (Test-Path $chromePath) {
         $shell = New-Object -ComObject WScript.Shell
-        $atalho = $shell.CreateShortcut("$pinDir\Google Chrome.lnk")
+        $atalho = $shell.CreateShortcut("$pinDir\02-Google Chrome.lnk")
         $atalho.TargetPath = $chromePath
         $atalho.Save()
     }
 
     # Explorador de Arquivos
     $shell = New-Object -ComObject WScript.Shell
-    $atalho = $shell.CreateShortcut("$pinDir\Explorador de Arquivos.lnk")
+    $atalho = $shell.CreateShortcut("$pinDir\03-Explorador de Arquivos.lnk")
     $atalho.TargetPath = "explorer.exe"
     $atalho.Save()
 
-    Write-Host "  Barra de tarefas configurada" -ForegroundColor Green
-    Write-Host "  (Opera GX, Chrome, Explorador)" -ForegroundColor Gray
+    Write-Host "  Barra limpa e configurada (Opera GX, Chrome, Explorador)" -ForegroundColor Green
 } catch {
     Write-Host "  ERRO" -ForegroundColor Red
     $erros += "Barra de tarefas"
