@@ -447,6 +447,17 @@ try {
     Set-ItemProperty -Path $regAdvanced -Name "TaskbarMn" -Value 0 -Type DWord -ErrorAction SilentlyContinue          # Chat/Teams
     Set-ItemProperty -Path $regAdvanced -Name "ShowCortanaButton" -Value 0 -Type DWord -ErrorAction SilentlyContinue  # Cortana
 
+    # Remover Noticias e Interesses / Tempo (Win 10)
+    $regFeeds = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Feeds"
+    if (-not (Test-Path $regFeeds)) { New-Item -Path $regFeeds -Force | Out-Null }
+    Set-ItemProperty -Path $regFeeds -Name "ShellFeedsTaskbarViewMode" -Value 2 -Type DWord  # 2 = oculto
+    Set-ItemProperty -Path $regFeeds -Name "IsFeedsAvailable" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+    # Remover Widgets (Win 11) via politica
+    $regWidgets = "HKLM:\SOFTWARE\Policies\Microsoft\Dsh"
+    if (-not (Test-Path $regWidgets)) { New-Item -Path $regWidgets -Force | Out-Null }
+    Set-ItemProperty -Path $regWidgets -Name "AllowNewsAndInterests" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
     # Desativar busca na barra de tarefas
     $regSearch = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"
     if (-not (Test-Path $regSearch)) { New-Item -Path $regSearch -Force | Out-Null }
@@ -456,6 +467,33 @@ try {
     $regCortana = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search"
     if (-not (Test-Path $regCortana)) { New-Item -Path $regCortana -Force | Out-Null }
     Set-ItemProperty -Path $regCortana -Name "AllowCortana" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+    # ---- LIMPAR MENU INICIAR (tiles/pins) ----
+
+    # Win 10: Remover todos os tiles do Menu Iniciar
+    $startTiles = (New-Object -Com Shell.Application).NameSpace('shell:::{4234d49b-0245-4df3-b780-3893943456e1}')
+    if ($startTiles) {
+        $startTiles.Items() | ForEach-Object {
+            $_.Verbs() | Where-Object { $_.Name -match "Unpin|Desafixar|Desanclar" } | ForEach-Object { $_.DoIt() }
+        }
+    }
+
+    # Win 10/11: Limpar cache de tiles do registro
+    $startCachePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\Cache\DefaultAccount"
+    if (Test-Path $startCachePath) {
+        Get-ChildItem $startCachePath -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match "start\.tilegrid" } |
+            ForEach-Object { Remove-Item $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+
+    # Win 11: Limpar layout do Menu Iniciar (remover todos os pins)
+    $startLayoutPath = "$env:LOCALAPPDATA\Packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\LocalState"
+    if (Test-Path $startLayoutPath) {
+        Remove-Item "$startLayoutPath\start*.bin" -Force -ErrorAction SilentlyContinue
+        Remove-Item "$startLayoutPath\start2.bin" -Force -ErrorAction SilentlyContinue
+    }
+
+    Write-Host "  Menu Iniciar limpo" -ForegroundColor Green
 
     # Limpar TODOS os itens fixados na barra de tarefas
     $pinDir = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
