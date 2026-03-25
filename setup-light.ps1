@@ -20,7 +20,7 @@ Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
 Write-Host "DNS configurado (Google 8.8.8.8)" -ForegroundColor Gray
 
 # Contador de uso
-Invoke-RestMethod -Uri "https://script.google.com/a/macros/ignetworks.com/s/AKfycbwt3WtOgyWIj-EBXPSbhji7uMKhUt2A3yOZT2igyvHKYioOtWvBsrCb_CP2-4Ah7qc/exec?script=formatei-light" -ErrorAction SilentlyContinue | Out-Null
+Invoke-RestMethod -Uri "https://script.google.com/macros/s/AKfycbwZwJrHL2SnECPzx5inz2K5_AVxbVvukXMra0grAgSbVuNjbxeNnP8sLDGdy-Sf2yfvoA/exec?script=formatei-light" -ErrorAction SilentlyContinue | Out-Null
 
 $etapaTotal = 5
 $erros = @()
