@@ -148,7 +148,8 @@ $programas = @(
     @{ nome = "Calibre";             id = "calibre.calibre" },
     @{ nome = "HakuNeko";            id = "HakuNeko.HakuNeko" },
     @{ nome = "KCC";                 id = "ciromattia.KCC" },
-    @{ nome = "Kindle Previewer";    id = "Amazon.KindlePreviewer" }
+    @{ nome = "Kindle Previewer";    id = "Amazon.KindlePreviewer" },
+    @{ nome = "MSI Afterburner";    id = "Guru3D.Afterburner" }
 )
 
 $total = $programas.Count + 1  # +1 para AnyDesk
