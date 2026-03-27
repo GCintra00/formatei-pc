@@ -145,28 +145,45 @@ foreach ($mid in $mcafeeIds) {
         Write-Host " nao encontrado" -ForegroundColor Gray
     }
 }
-Kill-McAfee
 Write-Host "  McAfee: concluido" -ForegroundColor Green
 
-Stop-Process -Name "OneDrive" -Force -ErrorAction SilentlyContinue
+# Matar TUDO via taskkill (nao trava em processos protegidos)
+$matarNomes = @("OneDrive","OneDriveSetup","ms-teams","Teams","Dropbox","DropboxUpdate","mcafee*","McUICnt","mcshield","ModuleCoreService","MMSSHOST","McPvTray","WebAdvisor","mfemms","mfevtps","protectedmodulehost")
+foreach ($nome in $matarNomes) {
+    Start-Process "taskkill" -ArgumentList "/f /im $nome.exe" -WindowStyle Hidden -ErrorAction SilentlyContinue
+}
 Start-Sleep -Seconds 2
+
+# OneDrive (timeout 15s)
+Write-Host "  OneDrive..." -ForegroundColor Yellow -NoNewline
 $onedrivePath = "$env:SystemRoot\SysWOW64\OneDriveSetup.exe"
 if (-not (Test-Path $onedrivePath)) { $onedrivePath = "$env:SystemRoot\System32\OneDriveSetup.exe" }
 if (Test-Path $onedrivePath) {
-    Start-Process $onedrivePath -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue
+    $proc = Start-Process $onedrivePath -ArgumentList "/uninstall" -PassThru -ErrorAction SilentlyContinue
+    if ($proc -and -not $proc.WaitForExit(15000)) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
     $removidos += "OneDrive"
 }
-winget uninstall --id Microsoft.OneDrive -e --silent 2>&1 | Out-Null
+$p = Start-Process "winget" -ArgumentList "uninstall --id Microsoft.OneDrive -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+Write-Host " OK" -ForegroundColor Green
 
-Stop-Process -Name "ms-teams" -Force -ErrorAction SilentlyContinue
-Stop-Process -Name "Teams" -Force -ErrorAction SilentlyContinue
-winget uninstall --id Microsoft.Teams -e --silent 2>&1 | Out-Null
-winget uninstall --name "Microsoft Teams" --silent 2>&1 | Out-Null
+# Teams (timeout 15s)
+Write-Host "  Teams..." -ForegroundColor Yellow -NoNewline
+$p = Start-Process "winget" -ArgumentList "uninstall --id Microsoft.Teams -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
 $teamsPath = "$env:LOCALAPPDATA\Microsoft\Teams\Update.exe"
 if (Test-Path $teamsPath) {
-    Start-Process $teamsPath -ArgumentList "--uninstall -s" -Wait -ErrorAction SilentlyContinue
+    $proc = Start-Process $teamsPath -ArgumentList "--uninstall -s" -PassThru -ErrorAction SilentlyContinue
+    if ($proc -and -not $proc.WaitForExit(15000)) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
     $removidos += "Teams"
 }
+Write-Host " OK" -ForegroundColor Green
+
+# Dropbox (timeout 15s)
+Write-Host "  Dropbox..." -ForegroundColor Yellow -NoNewline
+$p = Start-Process "winget" -ArgumentList "uninstall --id Dropbox.Dropbox -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+Write-Host " OK" -ForegroundColor Green
 
 if ($removidos.Count -eq 0) {
     Write-Host "  Nenhum bloatware encontrado" -ForegroundColor Gray
