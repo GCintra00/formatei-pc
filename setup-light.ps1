@@ -112,20 +112,30 @@ foreach ($app in $bloatware) {
         }
 }
 
-# McAfee: parar servicos, matar processos, desinstalar
-Get-Service -DisplayName "*McAfee*" -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue
-Get-Process -Name "*mcafee*","*mcshield*","*mcuicnt*","*ModuleCore*","*MMSSHOST*","*McPvTray*","*WebAdvisor*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+# McAfee: desativar servicos para nao reabrir, matar tudo
+Write-Host "  McAfee: parando servicos..." -ForegroundColor Yellow
+Get-Service -DisplayName "*McAfee*" -ErrorAction SilentlyContinue | ForEach-Object {
+    Stop-Service -Name $_.Name -Force -ErrorAction SilentlyContinue
+    Set-Service -Name $_.Name -StartupType Disabled -ErrorAction SilentlyContinue
+}
+# Funcao para matar TUDO do McAfee
+function Kill-McAfee {
+    Get-Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.Name -match "mcafee|mcshield|mcuicnt|ModuleCore|MMSSHOST|McPvTray|WebAdvisor|McInstaller|mfemms|mfevtps|mcods|mfefire|mfetp|protectedmodulehost"
+    } | Stop-Process -Force -ErrorAction SilentlyContinue
+}
+Kill-McAfee
 
-# Tentar via winget com timeout de 15s (se travar, mata e segue)
+# Desinstalar cada componente com timeout de 15s
 $mcafeeIds = @("McAfee.WebAdvisor", "McAfee.McAfee", "McAfee.LiveSafe", "McAfee.TrueKey", "McAfee.SecurityScan")
 foreach ($mid in $mcafeeIds) {
+    Kill-McAfee  # matar antes de cada tentativa
     Write-Host "  McAfee: $mid..." -ForegroundColor Yellow -NoNewline
     $p = Start-Process "winget" -ArgumentList "uninstall --id $mid -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
     if ($p) {
         if (-not $p.WaitForExit(15000)) {
             Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-            # Matar qualquer popup McAfee que abriu
-            Get-Process -Name "*mcafee*","*McInstallerService*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Kill-McAfee  # matar popups que abriram
             Write-Host " timeout (forcado)" -ForegroundColor Yellow
         } else {
             Write-Host " OK" -ForegroundColor Green
@@ -134,6 +144,8 @@ foreach ($mid in $mcafeeIds) {
         Write-Host " nao encontrado" -ForegroundColor Gray
     }
 }
+Kill-McAfee
+Write-Host "  McAfee: concluido" -ForegroundColor Green
 
 Stop-Process -Name "OneDrive" -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
