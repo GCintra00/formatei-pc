@@ -115,30 +115,27 @@ foreach ($app in $bloatware) {
         }
 }
 
-# McAfee via registro (rapido, sem Get-WmiObject que trava)
-$mcafeePaths = @(
-    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-    "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
-)
-foreach ($regPath in $mcafeePaths) {
-    Get-ChildItem $regPath -ErrorAction SilentlyContinue | ForEach-Object {
-        $name = (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).DisplayName
-        $uninstall = (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).UninstallString
-        if ($name -like "*McAfee*" -and $uninstall) {
-            $proc = Start-Process "cmd.exe" -ArgumentList "/c `"$uninstall`" /quiet /norestart" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
-            if ($proc -and -not $proc.WaitForExit(30000)) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
-            $removidos += $name
-            Write-Host "  Removido: $name" -ForegroundColor Green
-        }
-    }
-}
-# McAfee via winget (todos os componentes, silencioso)
+# McAfee: parar servicos, matar processos, desinstalar
+Get-Service -DisplayName "*McAfee*" -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue
+Get-Process -Name "*mcafee*","*mcshield*","*mcuicnt*","*ModuleCore*","*MMSSHOST*","*McPvTray*","*WebAdvisor*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+# Tentar via winget com timeout de 15s (se travar, mata e segue)
 $mcafeeIds = @("McAfee.WebAdvisor", "McAfee.McAfee", "McAfee.LiveSafe", "McAfee.TrueKey", "McAfee.SecurityScan")
 foreach ($mid in $mcafeeIds) {
-    $p = Start-Process "winget" -ArgumentList "uninstall --id $mid -e --silent --force" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
-    if ($p -and -not $p.WaitForExit(30000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+    Write-Host "  McAfee: $mid..." -ForegroundColor Yellow -NoNewline
+    $p = Start-Process "winget" -ArgumentList "uninstall --id $mid -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+    if ($p) {
+        if (-not $p.WaitForExit(15000)) {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            Get-Process -Name "*mcafee*","*McInstallerService*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Write-Host " timeout (forcado)" -ForegroundColor Yellow
+        } else {
+            Write-Host " OK" -ForegroundColor Green
+        }
+    } else {
+        Write-Host " nao encontrado" -ForegroundColor Gray
+    }
 }
-winget uninstall --name "McAfee" --silent --force 2>&1 | Out-Null
 
 Stop-Process -Name "OneDrive" -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
