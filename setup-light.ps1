@@ -116,7 +116,13 @@ foreach ($regPath in $mcafeePaths) {
         }
     }
 }
-winget uninstall --name "McAfee" --silent 2>&1 | Out-Null
+# McAfee via winget (todos os componentes, silencioso)
+$mcafeeIds = @("McAfee.WebAdvisor", "McAfee.McAfee", "McAfee.LiveSafe", "McAfee.TrueKey", "McAfee.SecurityScan")
+foreach ($mid in $mcafeeIds) {
+    $p = Start-Process "winget" -ArgumentList "uninstall --id $mid -e --silent --force" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+    if ($p -and -not $p.WaitForExit(30000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+}
+winget uninstall --name "McAfee" --silent --force 2>&1 | Out-Null
 
 Stop-Process -Name "OneDrive" -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
