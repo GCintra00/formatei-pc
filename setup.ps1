@@ -73,7 +73,8 @@ $bloatware = @(
     "Facebook*",
     "Instagram*",
     "Disney*",
-    "Clipchamp*"
+    "Clipchamp*",
+    "Dropbox*"
 )
 
 $removidos = @()
