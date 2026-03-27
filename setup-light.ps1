@@ -99,8 +99,24 @@ foreach ($app in $bloatware) {
         }
 }
 
-$mcafee = Get-WmiObject -Class Win32_Product -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*McAfee*" }
-foreach ($m in $mcafee) { $m.Uninstall() | Out-Null; $removidos += $m.Name }
+# McAfee via registro (rapido, sem Get-WmiObject que trava)
+$mcafeePaths = @(
+    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+    "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+)
+foreach ($regPath in $mcafeePaths) {
+    Get-ChildItem $regPath -ErrorAction SilentlyContinue | ForEach-Object {
+        $name = (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).DisplayName
+        $uninstall = (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).UninstallString
+        if ($name -like "*McAfee*" -and $uninstall) {
+            $proc = Start-Process "cmd.exe" -ArgumentList "/c `"$uninstall`" /quiet /norestart" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+            if ($proc -and -not $proc.WaitForExit(30000)) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+            $removidos += $name
+            Write-Host "  Removido: $name" -ForegroundColor Green
+        }
+    }
+}
+winget uninstall --name "McAfee" --silent 2>&1 | Out-Null
 
 Stop-Process -Name "OneDrive" -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
