@@ -41,18 +41,43 @@ $wingetOk = Get-Command winget -ErrorAction SilentlyContinue
 if (-not $wingetOk) {
     Write-Host "`nWinget nao encontrado. Instalando..." -ForegroundColor Yellow
     try {
-        # Baixar e instalar App Installer (contem winget)
+        $tempDir = "$env:TEMP\winget-install"
+        New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+
+        # Baixar dependencias necessarias
+        Write-Host "  Baixando dependencias..." -ForegroundColor Gray
+        $vcLibsUrl = "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx"
+        $uiXamlUrl = "https://github.com/nicedavid98/winget_dependencies/raw/main/Microsoft.UI.Xaml.2.8.x64.appx"
+        Invoke-WebRequest -Uri $vcLibsUrl -OutFile "$tempDir\vclibs.appx" -UseBasicParsing -ErrorAction Stop
+        Add-AppxPackage -Path "$tempDir\vclibs.appx" -ErrorAction SilentlyContinue
+        Invoke-WebRequest -Uri $uiXamlUrl -OutFile "$tempDir\uixaml.appx" -UseBasicParsing -ErrorAction Stop
+        Add-AppxPackage -Path "$tempDir\uixaml.appx" -ErrorAction SilentlyContinue
+
+        # Baixar e instalar winget
+        Write-Host "  Baixando winget..." -ForegroundColor Gray
         $wingetUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
-        $wingetPath = "$env:TEMP\AppInstaller.msixbundle"
-        Invoke-WebRequest -Uri $wingetUrl -OutFile $wingetPath -UseBasicParsing -ErrorAction Stop
-        Add-AppxPackage -Path $wingetPath -ErrorAction Stop
-        Remove-Item $wingetPath -Force -ErrorAction SilentlyContinue
-        # Atualizar PATH
+        Invoke-WebRequest -Uri $wingetUrl -OutFile "$tempDir\winget.msixbundle" -UseBasicParsing -ErrorAction Stop
+        Add-AppxPackage -Path "$tempDir\winget.msixbundle" -ErrorAction Stop
+
+        Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+
+        # Atualizar PATH para encontrar winget
         $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
-        Write-Host "  Winget instalado!" -ForegroundColor Green
+        # Adicionar caminho comum do winget
+        $wingetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps"
+        if ($env:PATH -notlike "*$wingetPath*") { $env:PATH += ";$wingetPath" }
+
+        $wingetOk = Get-Command winget -ErrorAction SilentlyContinue
+        if ($wingetOk) {
+            Write-Host "  Winget instalado!" -ForegroundColor Green
+        } else {
+            Write-Host "  Winget instalado mas precisa reiniciar o PowerShell" -ForegroundColor Yellow
+            Write-Host "  Rode o script novamente apos fechar e reabrir o PowerShell" -ForegroundColor Yellow
+        }
     } catch {
         Write-Host "  ERRO ao instalar winget: $_" -ForegroundColor Red
         Write-Host "  Tente instalar 'App Installer' pela Microsoft Store" -ForegroundColor Yellow
+        Write-Host "  Ou abra a Microsoft Store e busque 'App Installer'" -ForegroundColor Yellow
     }
 }
 
