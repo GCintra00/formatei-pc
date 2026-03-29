@@ -307,7 +307,7 @@ foreach ($prog in $programas) {
     }
 }
 
-# AnyDesk - instalacao manual
+# AnyDesk - baixar para pasta Downloads Setup
 $atual++
 Write-Host "  [$atual/$total] AnyDesk..." -ForegroundColor Yellow -NoNewline
 $anydeskServico = Get-Service -Name "AnyDesk" -ErrorAction SilentlyContinue
@@ -316,28 +316,11 @@ if ($anydeskServico) {
     $instalados += "AnyDesk - Ja instalado"
 } else {
     try {
-        $anydeskTemp = "$env:TEMP\AnyDesk.exe"
-        Invoke-WebRequest -Uri "$ghRelease/AnyDesk.exe" -OutFile $anydeskTemp -ErrorAction Stop
-        Write-Host ""
-        Write-Host ""
-        Write-Host "  ============================================" -ForegroundColor Yellow
-        Write-Host "  ATENCAO: AnyDesk vai abrir." -ForegroundColor Yellow
-        Write-Host "  Clique em 'Instalar AnyDesk' no programa." -ForegroundColor Yellow
-        Write-Host "  Depois feche a janela do AnyDesk." -ForegroundColor Yellow
-        Write-Host "  O script continua automaticamente." -ForegroundColor Yellow
-        Write-Host "  ============================================" -ForegroundColor Yellow
-        Write-Host ""
-        Start-Process $anydeskTemp -Wait
-        Remove-Item $anydeskTemp -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 3
-        $anydeskServico = Get-Service -Name "AnyDesk" -ErrorAction SilentlyContinue
-        if ($anydeskServico) {
-            Write-Host "  AnyDesk instalado com sucesso!" -ForegroundColor Green
-            $instalados += "AnyDesk - Instalado"
-        } else {
-            Write-Host "  AnyDesk pode nao ter sido instalado corretamente" -ForegroundColor Yellow
-            $instalados += "AnyDesk - Verificar manualmente"
-        }
+        $dlDir = "$desktop\Downloads Setup"
+        New-Item -ItemType Directory -Path $dlDir -Force | Out-Null
+        Invoke-WebRequest -Uri "$ghRelease/AnyDesk.exe" -OutFile "$dlDir\AnyDesk.exe" -ErrorAction Stop
+        Write-Host " Baixado (instalar manualmente)" -ForegroundColor Green
+        $instalados += "AnyDesk - Baixado em Downloads Setup"
     } catch {
         Write-Host " ERRO: $_" -ForegroundColor Red
         $instalados += "AnyDesk - ERRO"
@@ -381,24 +364,14 @@ try {
     $erros += "STL Thumb"
 }
 
-# uTorrent Web
+# uTorrent Web - baixar para pasta Downloads Setup
 Write-Host "  uTorrent Web..." -ForegroundColor Yellow -NoNewline
 try {
-    $utInstaller = "$env:TEMP\utweb_installer.exe"
-    Invoke-WebRequest -Uri "$ghRelease/utweb_installer.exe" -OutFile $utInstaller -ErrorAction Stop
-    Write-Host ""
-    Write-Host ""
-    Write-Host "  ============================================" -ForegroundColor Yellow
-    Write-Host "  ATENCAO: uTorrent Web vai abrir." -ForegroundColor Yellow
-    Write-Host "  Clique: Next > Agree > Skip All > Finish" -ForegroundColor Yellow
-    Write-Host "  NAO marque 'Launch uTorrent Web'" -ForegroundColor Yellow
-    Write-Host "  O script continua automaticamente." -ForegroundColor Yellow
-    Write-Host "  ============================================" -ForegroundColor Yellow
-    Write-Host ""
-    Start-Process $utInstaller -Wait
-    Remove-Item $utInstaller -Force -ErrorAction SilentlyContinue
-    Write-Host "  uTorrent Web instalado!" -ForegroundColor Green
-    $instalados += "uTorrent Web - Instalado"
+    $dlDir = "$desktop\Downloads Setup"
+    New-Item -ItemType Directory -Path $dlDir -Force | Out-Null
+    Invoke-WebRequest -Uri "$ghRelease/utweb_installer.exe" -OutFile "$dlDir\uTorrent Web.exe" -ErrorAction Stop
+    Write-Host " Baixado (instalar manualmente)" -ForegroundColor Green
+    $instalados += "uTorrent Web - Baixado em Downloads Setup"
 } catch {
     Write-Host " ERRO" -ForegroundColor Red
     $instalados += "uTorrent Web - ERRO"
