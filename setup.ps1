@@ -34,6 +34,29 @@ Write-Host "  FORMATEI O PC E AGORA O QUE FAZER?" -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Cyan
 
 # ============================================
+# [0] VERIFICAR/INSTALAR WINGET
+# ============================================
+
+$wingetOk = Get-Command winget -ErrorAction SilentlyContinue
+if (-not $wingetOk) {
+    Write-Host "`nWinget nao encontrado. Instalando..." -ForegroundColor Yellow
+    try {
+        # Baixar e instalar App Installer (contem winget)
+        $wingetUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
+        $wingetPath = "$env:TEMP\AppInstaller.msixbundle"
+        Invoke-WebRequest -Uri $wingetUrl -OutFile $wingetPath -UseBasicParsing -ErrorAction Stop
+        Add-AppxPackage -Path $wingetPath -ErrorAction Stop
+        Remove-Item $wingetPath -Force -ErrorAction SilentlyContinue
+        # Atualizar PATH
+        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
+        Write-Host "  Winget instalado!" -ForegroundColor Green
+    } catch {
+        Write-Host "  ERRO ao instalar winget: $_" -ForegroundColor Red
+        Write-Host "  Tente instalar 'App Installer' pela Microsoft Store" -ForegroundColor Yellow
+    }
+}
+
+# ============================================
 # [1] REMOVER BLOATWARE
 # ============================================
 
@@ -103,7 +126,7 @@ foreach ($app in $bloatware) {
             Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
                 Where-Object { $_.DisplayName -like $app } |
                 ForEach-Object {
-                    Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction SilentlyContinue
+                    Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction SilentlyContinue | Out-Null
                     $removidos += $_.DisplayName
                 }
         }
@@ -111,7 +134,7 @@ foreach ($app in $bloatware) {
     Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
         Where-Object { $_.DisplayName -like $app } |
         ForEach-Object {
-            Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction SilentlyContinue
+            Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction SilentlyContinue | Out-Null
         }
 }
 
