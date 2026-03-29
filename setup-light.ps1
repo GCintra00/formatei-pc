@@ -13,6 +13,9 @@ if (-not $isAdmin) {
     exit
 }
 
+# Forcar TLS 1.2 (Windows 10 antigo usa TLS 1.0 e GitHub rejeita)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 # Corrigir DNS
 Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
     Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") -ErrorAction SilentlyContinue
@@ -70,6 +73,10 @@ if (-not $wingetOk) {
         Write-Host "  ERRO ao instalar winget: $_" -ForegroundColor Red
         Write-Host "  Tente instalar 'App Installer' pela Microsoft Store" -ForegroundColor Yellow
     }
+}
+$hasWinget = [bool](Get-Command winget -ErrorAction SilentlyContinue)
+if (-not $hasWinget) {
+    Write-Host "  AVISO: Winget nao disponivel. Programas via Winget serao pulados." -ForegroundColor Yellow
 }
 
 # ============================================
@@ -167,27 +174,29 @@ function Kill-McAfee {
 }
 Kill-McAfee
 
-# Desinstalar cada componente com timeout de 15s
-$mcafeeIds = @("McAfee.WebAdvisor", "McAfee.McAfee", "McAfee.LiveSafe", "McAfee.TrueKey", "McAfee.SecurityScan")
-foreach ($mid in $mcafeeIds) {
-    Kill-McAfee  # matar antes de cada tentativa
-    Write-Host "  McAfee: $mid..." -ForegroundColor Yellow -NoNewline
-    $p = Start-Process "winget" -ArgumentList "uninstall --id $mid -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
-    if ($p) {
-        if (-not $p.WaitForExit(15000)) {
-            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-            Kill-McAfee  # matar popups que abriram
-            Write-Host " timeout (forcado)" -ForegroundColor Yellow
+# Desinstalar cada componente McAfee com timeout de 15s
+if ($hasWinget) {
+    $mcafeeIds = @("McAfee.WebAdvisor", "McAfee.McAfee", "McAfee.LiveSafe", "McAfee.TrueKey", "McAfee.SecurityScan")
+    foreach ($mid in $mcafeeIds) {
+        Kill-McAfee
+        Write-Host "  McAfee: $mid..." -ForegroundColor Yellow -NoNewline
+        $p = Start-Process "winget" -ArgumentList "uninstall --id $mid -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+        if ($p) {
+            if (-not $p.WaitForExit(15000)) {
+                Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+                Kill-McAfee
+                Write-Host " timeout (forcado)" -ForegroundColor Yellow
+            } else {
+                Write-Host " OK" -ForegroundColor Green
+            }
         } else {
-            Write-Host " OK" -ForegroundColor Green
+            Write-Host " nao encontrado" -ForegroundColor Gray
         }
-    } else {
-        Write-Host " nao encontrado" -ForegroundColor Gray
     }
 }
 Write-Host "  McAfee: concluido" -ForegroundColor Green
 
-# Matar TUDO via taskkill (mais agressivo que Stop-Process, nao trava)
+# Matar TUDO via taskkill
 Write-Host "  Matando processos restantes..." -ForegroundColor Yellow
 $matarNomes = @("OneDrive","OneDriveSetup","ms-teams","Teams","Dropbox","DropboxUpdate","mcafee*","McUICnt","mcshield","ModuleCoreService","MMSSHOST","McPvTray","WebAdvisor","mfemms","mfevtps","protectedmodulehost")
 foreach ($nome in $matarNomes) {
@@ -204,14 +213,18 @@ if (Test-Path $onedrivePath) {
     if ($proc -and -not $proc.WaitForExit(15000)) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
     $removidos += "OneDrive"
 }
-$p = Start-Process "winget" -ArgumentList "uninstall --id Microsoft.OneDrive -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
-if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+if ($hasWinget) {
+    $p = Start-Process "winget" -ArgumentList "uninstall --id Microsoft.OneDrive -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+    if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+}
 Write-Host " OK" -ForegroundColor Green
 
 # Teams (timeout 15s)
 Write-Host "  Teams..." -ForegroundColor Yellow -NoNewline
-$p = Start-Process "winget" -ArgumentList "uninstall --id Microsoft.Teams -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
-if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+if ($hasWinget) {
+    $p = Start-Process "winget" -ArgumentList "uninstall --id Microsoft.Teams -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+    if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+}
 $teamsPath = "$env:LOCALAPPDATA\Microsoft\Teams\Update.exe"
 if (Test-Path $teamsPath) {
     $proc = Start-Process $teamsPath -ArgumentList "--uninstall -s" -PassThru -ErrorAction SilentlyContinue
@@ -222,8 +235,10 @@ Write-Host " OK" -ForegroundColor Green
 
 # Dropbox (timeout 15s)
 Write-Host "  Dropbox..." -ForegroundColor Yellow -NoNewline
-$p = Start-Process "winget" -ArgumentList "uninstall --id Dropbox.Dropbox -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
-if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+if ($hasWinget) {
+    $p = Start-Process "winget" -ArgumentList "uninstall --id Dropbox.Dropbox -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+    if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+}
 Write-Host " OK" -ForegroundColor Green
 
 if ($removidos.Count -eq 0) {
@@ -239,13 +254,18 @@ if ($removidos.Count -eq 0) {
 Write-Host "`n[2/$etapaTotal] Instalando Google Chrome..." -ForegroundColor Cyan
 
 Write-Host "  Google Chrome..." -ForegroundColor Yellow -NoNewline
-$resultado = winget install --id Google.Chrome -e --accept-source-agreements --accept-package-agreements --silent 2>&1
-if ($LASTEXITCODE -eq 0) {
-    Write-Host " OK" -ForegroundColor Green
-} elseif ($resultado -match "already installed") {
-    Write-Host " Ja instalado" -ForegroundColor Gray
+if ($hasWinget) {
+    $resultado = winget install --id Google.Chrome -e --accept-source-agreements --accept-package-agreements --silent 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host " OK" -ForegroundColor Green
+    } elseif ($resultado -match "already installed") {
+        Write-Host " Ja instalado" -ForegroundColor Gray
+    } else {
+        Write-Host " ERRO" -ForegroundColor Red
+        $erros += "Google Chrome"
+    }
 } else {
-    Write-Host " ERRO" -ForegroundColor Red
+    Write-Host " PULADO (sem winget)" -ForegroundColor Yellow
     $erros += "Google Chrome"
 }
 

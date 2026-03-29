@@ -13,6 +13,9 @@ if (-not $isAdmin) {
     exit
 }
 
+# Forcar TLS 1.2 (Windows 10 antigo usa TLS 1.0 e GitHub rejeita)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 # Corrigir DNS
 Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
     Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") -ErrorAction SilentlyContinue
@@ -79,6 +82,12 @@ if (-not $wingetOk) {
         Write-Host "  Tente instalar 'App Installer' pela Microsoft Store" -ForegroundColor Yellow
         Write-Host "  Ou abra a Microsoft Store e busque 'App Installer'" -ForegroundColor Yellow
     }
+}
+# Flag global: winget disponivel?
+$hasWinget = [bool](Get-Command winget -ErrorAction SilentlyContinue)
+if (-not $hasWinget) {
+    Write-Host "  AVISO: Winget nao disponivel. Programas via Winget serao pulados." -ForegroundColor Yellow
+    Write-Host "  Instale 'App Installer' pela Microsoft Store e rode novamente." -ForegroundColor Yellow
 }
 
 # ============================================
@@ -177,6 +186,7 @@ function Kill-McAfee {
 Kill-McAfee
 
 $mcafeeIds = @("McAfee.WebAdvisor", "McAfee.McAfee", "McAfee.LiveSafe", "McAfee.TrueKey", "McAfee.SecurityScan")
+if ($hasWinget) {
 foreach ($mid in $mcafeeIds) {
     Kill-McAfee
     Write-Host "  McAfee: $mid..." -ForegroundColor Yellow -NoNewline
@@ -193,6 +203,7 @@ foreach ($mid in $mcafeeIds) {
         Write-Host " nao encontrado" -ForegroundColor Gray
     }
 }
+} # fim if hasWinget McAfee
 Write-Host "  McAfee: concluido" -ForegroundColor Green
 
 # Matar TUDO via taskkill (nao trava em processos protegidos)
@@ -211,14 +222,18 @@ if (Test-Path $onedrivePath) {
     if ($proc -and -not $proc.WaitForExit(15000)) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
     $removidos += "OneDrive"
 }
-$p = Start-Process "winget" -ArgumentList "uninstall --id Microsoft.OneDrive -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
-if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+if ($hasWinget) {
+    $p = Start-Process "winget" -ArgumentList "uninstall --id Microsoft.OneDrive -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+    if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+}
 Write-Host " OK" -ForegroundColor Green
 
 # Teams (timeout 15s)
 Write-Host "  Teams..." -ForegroundColor Yellow -NoNewline
-$p = Start-Process "winget" -ArgumentList "uninstall --id Microsoft.Teams -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
-if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+if ($hasWinget) {
+    $p = Start-Process "winget" -ArgumentList "uninstall --id Microsoft.Teams -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+    if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+}
 $teamsPath = "$env:LOCALAPPDATA\Microsoft\Teams\Update.exe"
 if (Test-Path $teamsPath) {
     $proc = Start-Process $teamsPath -ArgumentList "--uninstall -s" -PassThru -ErrorAction SilentlyContinue
@@ -229,8 +244,10 @@ Write-Host " OK" -ForegroundColor Green
 
 # Dropbox (timeout 15s)
 Write-Host "  Dropbox..." -ForegroundColor Yellow -NoNewline
-$p = Start-Process "winget" -ArgumentList "uninstall --id Dropbox.Dropbox -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
-if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+if ($hasWinget) {
+    $p = Start-Process "winget" -ArgumentList "uninstall --id Dropbox.Dropbox -e --silent --force --disable-interactivity" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+    if ($p -and -not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+}
 Write-Host " OK" -ForegroundColor Green
 
 if ($removidos.Count -eq 0) {
@@ -267,6 +284,13 @@ $atual = 0
 foreach ($prog in $programas) {
     $atual++
     Write-Host "  [$atual/$total] $($prog.nome)..." -ForegroundColor Yellow -NoNewline
+
+    if (-not $hasWinget) {
+        Write-Host " PULADO (sem winget)" -ForegroundColor Yellow
+        $instalados += "$($prog.nome) - PULADO (sem winget)"
+        $erros += $prog.nome
+        continue
+    }
 
     $resultado = winget install --id $prog.id -e --accept-source-agreements --accept-package-agreements --silent 2>&1
 
