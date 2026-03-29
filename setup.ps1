@@ -607,7 +607,7 @@ try {
 
     Write-Host "  Menu Iniciar limpo" -ForegroundColor Green
 
-    # Limpar TODOS os itens fixados na barra de tarefas
+    # Limpar TODOS os itens fixados na barra de tarefas (deixar vazia)
     $pinDir = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
     if (Test-Path $pinDir) {
         Remove-Item "$pinDir\*" -Force -ErrorAction SilentlyContinue
@@ -619,83 +619,11 @@ try {
     Remove-Item -Path $taskbandPath -Force -Recurse -ErrorAction SilentlyContinue
     New-Item -Path $taskbandPath -Force | Out-Null
 
-    # Desafixar Microsoft Edge e Microsoft Store da barra
-    $edgeAppId = "MSEdge"
-    $storeAppId = "Microsoft.WindowsStore"
-    # Remover via AppUserModelID
+    # Desafixar Edge e Store
     $regPins = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband\AuxilliaryPins"
     Remove-Item -Path $regPins -Force -Recurse -ErrorAction SilentlyContinue
 
-    # Fixar programas na ordem: Opera GX, Chrome, Explorador
-    # Opera GX
-    $operaPaths = @(
-        "$env:LOCALAPPDATA\Programs\Opera GX\opera.exe",
-        "$env:ProgramFiles\Opera GX\opera.exe",
-        "${env:ProgramFiles(x86)}\Opera GX\opera.exe"
-    )
-    foreach ($p in $operaPaths) {
-        if (Test-Path $p) {
-            $shell = New-Object -ComObject WScript.Shell
-            $atalho = $shell.CreateShortcut("$pinDir\01-Opera GX.lnk")
-            $atalho.TargetPath = $p
-            $atalho.Save()
-            break
-        }
-    }
-
-    # Chrome
-    $chromePath = "$env:ProgramFiles\Google\Chrome\Application\chrome.exe"
-    if (-not (Test-Path $chromePath)) { $chromePath = "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe" }
-    if (Test-Path $chromePath) {
-        $shell = New-Object -ComObject WScript.Shell
-        $atalho = $shell.CreateShortcut("$pinDir\02-Google Chrome.lnk")
-        $atalho.TargetPath = $chromePath
-        $atalho.Save()
-    }
-
-    # Explorador de Arquivos
-    $shell = New-Object -ComObject WScript.Shell
-    $atalho = $shell.CreateShortcut("$pinDir\03-Explorador de Arquivos.lnk")
-    $atalho.TargetPath = "explorer.exe"
-    $atalho.Save()
-
-    # Fixar programas na barra via syspin/verb (funciona Win 10 e 11)
-    # Metodo: criar atalhos no desktop temporariamente e usar Shell verb para fixar
-    $shell = New-Object -ComObject Shell.Application
-
-    # Tentar fixar Opera GX
-    $operaPaths = @(
-        "$env:LOCALAPPDATA\Programs\Opera GX\opera.exe",
-        "$env:ProgramFiles\Opera GX\opera.exe",
-        "${env:ProgramFiles(x86)}\Opera GX\opera.exe"
-    )
-    foreach ($p in $operaPaths) {
-        if (Test-Path $p) {
-            $dir = $shell.Namespace((Split-Path $p))
-            $item = $dir.ParseName((Split-Path $p -Leaf))
-            $item.Verbs() | Where-Object { $_.Name -match "taskbar|barra de tarefas|Fixar na barra" } | ForEach-Object { $_.DoIt() }
-            Write-Host "  Fixado: Opera GX" -ForegroundColor Green
-            break
-        }
-    }
-
-    # Tentar fixar Chrome
-    $chromePath = "$env:ProgramFiles\Google\Chrome\Application\chrome.exe"
-    if (-not (Test-Path $chromePath)) { $chromePath = "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe" }
-    if (Test-Path $chromePath) {
-        $dir = $shell.Namespace((Split-Path $chromePath))
-        $item = $dir.ParseName((Split-Path $chromePath -Leaf))
-        $item.Verbs() | Where-Object { $_.Name -match "taskbar|barra de tarefas|Fixar na barra" } | ForEach-Object { $_.DoIt() }
-        Write-Host "  Fixado: Chrome" -ForegroundColor Green
-    }
-
-    # Tentar fixar Explorador de Arquivos
-    $explorerDir = $shell.Namespace("$env:WINDIR")
-    $explorerItem = $explorerDir.ParseName("explorer.exe")
-    $explorerItem.Verbs() | Where-Object { $_.Name -match "taskbar|barra de tarefas|Fixar na barra" } | ForEach-Object { $_.DoIt() }
-    Write-Host "  Fixado: Explorador de Arquivos" -ForegroundColor Green
-
-    Write-Host "  Barra limpa e configurada" -ForegroundColor Green
+    Write-Host "  Barra de tarefas limpa (vazia)" -ForegroundColor Green
 } catch {
     Write-Host "  ERRO na barra: $_" -ForegroundColor Red
     $erros += "Barra de tarefas"
