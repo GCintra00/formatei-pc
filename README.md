@@ -37,6 +37,8 @@ Ferramenta completa de manutencao de disco. Inclui tudo do anterior + muitas out
 irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/disk-toolkit.ps1 | iex
 ```
 
+> Documentacao completa em HTML: [disk-toolkit-docs.html](disk-toolkit-docs.html) (visualizacao mais agradavel que o README, com tabelas, sumario navegavel, mockup da interface).
+>
 > Detalhes em [Disk Toolkit](#disk-toolkit-disk-toolkitps1) abaixo.
 
 > O prefixo configura o DNS do Google (8.8.8.8) **antes** de baixar o script, garantindo que o download funcione mesmo em PCs recem-formatados com DNS lento.

@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Disk Toolkit - Documentacao</title>
+<style>
+body { font-family: Arial, sans-serif; max-width: 960px; margin: 40px auto; padding: 0 20px; color: #333; line-height: 1.6; }
+h1 { color: #0078d7; border-bottom: 3px solid #0078d7; padding-bottom: 10px; }
+h2 { color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 35px; }
+h3 { color: #555; margin-top: 25px; }
+h4 { color: #0078d7; margin-top: 20px; margin-bottom: 8px; }
+.comando { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 6px; font-family: 'Consolas', monospace; font-size: 14px; overflow-x: auto; margin: 10px 0; }
+.aviso { background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px 15px; margin: 10px 0; border-radius: 0 6px 6px 0; }
+.info { background: #d1ecf1; border-left: 4px solid #17a2b8; padding: 12px 15px; margin: 10px 0; border-radius: 0 6px 6px 0; }
+.sucesso { background: #d4edda; border-left: 4px solid #28a745; padding: 12px 15px; margin: 10px 0; border-radius: 0 6px 6px 0; }
+.perigo { background: #f8d7da; border-left: 4px solid #dc3545; padding: 12px 15px; margin: 10px 0; border-radius: 0 6px 6px 0; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; vertical-align: top; }
+th { background: #f5f5f5; font-weight: bold; }
+tr:nth-child(even) { background: #fafafa; }
+code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', monospace; font-size: 13px; }
+.step { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 15px 20px; margin: 15px 0; }
+.step-number { display: inline-block; background: #0078d7; color: white; width: 28px; height: 28px; border-radius: 50%; text-align: center; line-height: 28px; font-weight: bold; margin-right: 8px; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 12px; margin: 2px; font-weight: 600; }
+.tag-info { background: #d1ecf1; color: #0c5460; }
+.tag-part { background: #e8e0ff; color: #5b3cc4; }
+.tag-maint { background: #d4edda; color: #155724; }
+.tag-backup { background: #fff3cd; color: #856404; }
+.tag-user { background: #ffe0e6; color: #c0392b; }
+.tag-danger { background: #f5c6cb; color: #721c24; }
+.tag-safe { background: #c3e6cb; color: #155724; }
+.action-card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 18px 22px; margin: 18px 0; background: #fdfdfd; }
+.action-title { font-size: 17px; font-weight: bold; color: #0078d7; margin: 0 0 8px 0; }
+.action-desc { color: #555; margin: 0 0 12px 0; }
+.action-fields { font-size: 14px; }
+.action-fields li { margin: 4px 0; }
+.tabs { display: flex; gap: 4px; margin-top: 20px; border-bottom: 2px solid #e0e0e0; }
+.tab { padding: 8px 16px; cursor: pointer; background: #f0f0f0; border-radius: 6px 6px 0 0; font-weight: 600; user-select: none; }
+.tab.active { background: #0078d7; color: white; }
+.tab-content { display: none; padding: 20px 0; }
+.tab-content.active { display: block; }
+.mockup { font-family: 'Consolas', monospace; background: #fdfdfd; border: 1px solid #ddd; padding: 16px; border-radius: 6px; white-space: pre; font-size: 13px; line-height: 1.4; overflow-x: auto; }
+.toc { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 14px 22px; margin: 20px 0; }
+.toc ul { columns: 2; -webkit-columns: 2; -moz-columns: 2; column-gap: 30px; margin: 0; padding-left: 18px; }
+.toc li { margin: 4px 0; break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<h1>Disk Toolkit - Manutencao de Disco no Windows</h1>
+<p><strong>Uso:</strong> Pessoal e profissional &nbsp;|&nbsp; <strong>Atualizado:</strong> Maio 2026 &nbsp;|&nbsp; <strong>Repositorio:</strong> <a href="https://github.com/GCintra00/formatei-pc">github.com/GCintra00/formatei-pc</a></p>
+
+<div class="info">
+<strong>O que e:</strong> Ferramenta GUI (janela) com 14 acoes de manutencao de disco em uma unica interface. Pra usar quando voce esta atendendo um PC e precisa fazer alguma operacao em HDD/SSD: ver saude, formatar, copiar dados, apagar perfil de usuario antigo, e mais.
+</div>
+
+<div class="aviso">
+<strong>Pre-requisito:</strong> PowerShell aberto <strong>como Administrador</strong>. Sem isso o script aborta na hora — varias operacoes mexem em discos e requerem elevacao.
+</div>
+
+<!-- ============================= -->
+<h2>1. Como Executar</h2>
+<!-- ============================= -->
+
+<div class="step">
+<span class="step-number">1</span> Abrir o <strong>PowerShell como Administrador</strong>
+<br><br>
+<em>Clique direito no icone do Windows -> Terminal (Admin) ou Windows PowerShell (Admin)</em>
+</div>
+
+<div class="step">
+<span class="step-number">2</span> Colar e executar:
+<div class="comando">irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/disk-toolkit.ps1 | iex</div>
+</div>
+
+<div class="step">
+<span class="step-number">3</span> A janela abre. Clicar em uma acao na esquerda -> ler descricao na direita -> preencher campos -> clicar <strong>Executar Acao</strong>.
+</div>
+
+<h3>Variante simples (apenas Wipe & Format)</h3>
+<p>Se voce so precisa zerar um HDD secundario, existe uma versao focada (so esse comando, sem o resto do toolkit):</p>
+<div class="comando">irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/prepare-storage.ps1 | iex</div>
+
+<!-- ============================= -->
+<h2>2. Interface</h2>
+<!-- ============================= -->
+
+<div class="mockup">+-------------------------------------------------------+
+| Disk Toolkit                                          |
++-----------------+-------------------------------------+
+| ACOES           | TITULO DA ACAO SELECIONADA          |
+|                 |                                     |
+| INFORMACAO      | Descricao detalhada do que essa     |
+|  - SMART        | acao faz, em portugues, com avisos. |
+|  - Detalhes     |                                     |
+|                 | Campos contextuais:                 |
+| PARTICAO        |  [dropdown disco/volume]            |
+|  - Wipe&Format  |  [campos de texto]                  |
+|  - Trocar label |  [checkboxes de opcoes]             |
+|  - Trocar letra |                                     |
+|  - Redimensionar|                                     |
+|  - Formatar     |                                     |
+|                 |                                     |
+| MANUTENCAO      |                                     |
+|  - CHKDSK       |                                     |
+|  - Defrag       |                                     |
+|  - Limpar livre |                                     |
+|                 |                                     |
+| BACKUP          |                                     |
+|  - Por usuario  |                                     |
+|  - Clone dados  |                                     |
+|  - VHDX C:      |                                     |
+|                 |                                     |
+| USUARIOS        |                                     |
+|  - Listar/Apagar|              [ EXECUTAR ACAO ]      |
++-----------------+-------------------------------------+
+| status: aguardando...                                 |
++-------------------------------------------------------+</div>
+
+<!-- ============================= -->
+<h2>3. Sumario das Acoes</h2>
+<!-- ============================= -->
+
+<div class="toc">
+<ul>
+<li><a href="#smart">S.M.A.R.T. (Saude do disco)</a></li>
+<li><a href="#info">Informacoes detalhadas</a></li>
+<li><a href="#wipe">Apagar e formatar (Wipe & Format)</a></li>
+<li><a href="#label">Trocar label do volume</a></li>
+<li><a href="#letter">Trocar letra de drive</a></li>
+<li><a href="#resize">Redimensionar particao</a></li>
+<li><a href="#format">Formatar com escolha de FS</a></li>
+<li><a href="#chkdsk">CHKDSK</a></li>
+<li><a href="#defrag">Desfragmentar / Otimizar</a></li>
+<li><a href="#wipefree">Limpar espaco livre</a></li>
+<li><a href="#backupuser">Backup arquivos de usuario</a></li>
+<li><a href="#clonedados">Clonar disco de dados</a></li>
+<li><a href="#vhdx">Imagem VHDX (snapshot do C:)</a></li>
+<li><a href="#users">Listar e apagar perfis</a></li>
+</ul>
+</div>
+
+<!-- ============================= -->
+<h2>4. INFORMACAO <span class="tag tag-info">leitura</span></h2>
+<!-- ============================= -->
+
+<div class="action-card" id="smart">
+<div class="action-title">S.M.A.R.T. (Saude do disco) <span class="tag tag-safe">leitura</span></div>
+<p class="action-desc">Le o status auto-reportado pelo proprio drive (S.M.A.R.T. = Self-Monitoring, Analysis and Reporting Technology). Util pra detectar disco em pre-falha antes que comece a dar problema.</p>
+<h4>O que mostra</h4>
+<ul class="action-fields">
+<li><strong>Saude:</strong> OK / Warning / Critical (resumo do proprio firmware)</li>
+<li><strong>Horas ligado:</strong> tempo total de operacao</li>
+<li><strong>Temperatura:</strong> atual e maxima ja registrada</li>
+<li><strong>Erros de leitura/escrita:</strong> totais + nao corrigiveis (relevantes pra prever falha)</li>
+<li><strong>Setores realocados:</strong> areas defeituosas substituidas pelo proprio drive</li>
+<li><strong>Wear:</strong> percentual de desgaste (SSDs principalmente)</li>
+</ul>
+<div class="info">Em alguns drives USB e SSDs externos, o driver nao expoe contadores de confiabilidade. Nesse caso so a saude basica aparece.</div>
+</div>
+
+<div class="action-card" id="info">
+<div class="action-title">Informacoes detalhadas <span class="tag tag-safe">leitura</span></div>
+<p class="action-desc">Tudo que da pra saber sobre um disco. Util pra confirmar com que tipo de hardware voce esta lidando antes de agir.</p>
+<h4>O que mostra</h4>
+<ul class="action-fields">
+<li>Modelo, numero de serie, versao de firmware</li>
+<li>Tipo de midia (HDD, SSD, NVMe)</li>
+<li>Barramento (SATA, USB, NVMe, etc)</li>
+<li>Tamanho total + tabela de particoes (GPT ou MBR)</li>
+<li>Lista de todas as particoes: tamanho, letra, sistema de arquivos, label, tipo</li>
+</ul>
+</div>
+
+<!-- ============================= -->
+<h2>5. PARTICAO <span class="tag tag-part">acoes destrutivas</span></h2>
+<!-- ============================= -->
+
+<div class="aviso">
+<strong>Disco do sistema bloqueado:</strong> Em todas as acoes destrutivas, o disco que contem o C: NAO aparece na lista. Impossivel selecionar por acidente.
+</div>
+
+<div class="action-card" id="wipe">
+<div class="action-title">Apagar e formatar (Wipe & Format) <span class="tag tag-danger">destrutiva</span></div>
+<p class="action-desc">Zera o disco inteiro e cria uma unica particao NTFS ocupando tudo. Use para preparar um HDD/SSD secundario novo, ou pra limpar um disco vindo de outro PC com particoes esquisitas.</p>
+<h4>O que acontece</h4>
+<ol class="action-fields">
+<li><code>Clear-Disk -RemoveData -RemoveOEM</code> -> apaga todas as particoes incluindo recovery/OEM</li>
+<li><code>Initialize-Disk -PartitionStyle GPT</code> -> cria tabela GPT nova</li>
+<li><code>New-Partition -UseMaximumSize -AssignDriveLetter</code> -> uma particao usando o disco todo, letra automatica</li>
+<li><code>Format-Volume -FileSystem NTFS -NewFileSystemLabel "..."</code> -> formata NTFS quick com a label que voce digitou</li>
+</ol>
+<div class="perigo"><strong>Irreversivel.</strong> Confirmacao dupla (botao + dialog) antes de executar.</div>
+</div>
+
+<div class="action-card" id="label">
+<div class="action-title">Trocar label do volume <span class="tag tag-safe">seguro</span></div>
+<p class="action-desc">Renomeia o volume (ex: "HDD" -> "Backup") sem precisar formatar. Nao perde dados.</p>
+<p class="action-fields"><strong>Campos:</strong> volume a renomear + nova label.</p>
+</div>
+
+<div class="action-card" id="letter">
+<div class="action-title">Trocar letra de drive <span class="tag tag-safe">seguro</span></div>
+<p class="action-desc">Reatribui a letra do drive (ex: E: -> D:) sem mexer nos dados. Util quando o Windows escolheu uma letra esquisita.</p>
+<p class="action-fields"><strong>Campos:</strong> volume + letra nova (A-Z, precisa estar livre).</p>
+</div>
+
+<div class="action-card" id="resize">
+<div class="action-title">Redimensionar particao <span class="tag tag-safe">seguro com cuidado</span></div>
+<p class="action-desc">Diminui ou aumenta uma particao existente. Sem perder dados.</p>
+<h4>Regras</h4>
+<ul class="action-fields">
+<li><strong>Diminuir:</strong> requer espaco livre dentro do volume (nao da pra diminuir abaixo do espaco ocupado)</li>
+<li><strong>Aumentar:</strong> requer espaco nao-alocado <strong>adjacente</strong> no mesmo disco (nao pula particoes vizinhas)</li>
+<li>Campo vazio = pega o maximo possivel</li>
+</ul>
+</div>
+
+<div class="action-card" id="format">
+<div class="action-title">Formatar com escolha de FS <span class="tag tag-danger">destrutiva</span></div>
+<p class="action-desc">Reformata UMA particao especifica (nao o disco todo, diferente do Wipe & Format). Voce escolhe entre NTFS, exFAT, FAT32 ou ReFS.</p>
+<h4>Quando usar cada FS</h4>
+<table>
+<tr><th>FS</th><th>Bom para</th><th>Limitacoes</th></tr>
+<tr><td><strong>NTFS</strong></td><td>Uso geral em Windows. Storage interno.</td><td>Linux/Mac requer driver pra escrever.</td></tr>
+<tr><td><strong>exFAT</strong></td><td>Pendrive/HD externo usado entre Windows, Mac, Linux, TVs.</td><td>Sem journaling - mais fragil em desligamento abrupto.</td></tr>
+<tr><td><strong>FAT32</strong></td><td>Pendrives pequenos, dispositivos antigos, BIOS de placa-mae.</td><td>Maximo 4 GB por arquivo. Particao max 32 GB no formatador do Windows.</td></tr>
+<tr><td><strong>ReFS</strong></td><td>Storage de dados em servidores Windows (resiliencia).</td><td>Nao bootavel, recursos limitados em Windows 10/11 Home.</td></tr>
+</table>
+</div>
+
+<!-- ============================= -->
+<h2>6. MANUTENCAO <span class="tag tag-maint">otimizacao</span></h2>
+<!-- ============================= -->
+
+<div class="action-card" id="chkdsk">
+<div class="action-title">Checagem de integridade (CHKDSK) <span class="tag tag-safe">seguro</span></div>
+<p class="action-desc">Wrapper do <code>chkdsk</code> nativo do Windows. Verifica erros no sistema de arquivos da particao.</p>
+<h4>Opcoes</h4>
+<ul class="action-fields">
+<li><strong>Modo basico:</strong> so verifica e reporta (read-only)</li>
+<li><strong>Corrigir erros (/f):</strong> tenta corrigir erros logicos encontrados</li>
+<li><strong>Verificar setores defeituosos (/r):</strong> faz varredura completa do disco. Marca setores ruins como inacessiveis. <strong>LENTO</strong> (horas em discos grandes).</li>
+</ul>
+<div class="info">Em particao em uso (C: principalmente), o Windows agenda pra rodar no proximo boot.</div>
+</div>
+
+<div class="action-card" id="defrag">
+<div class="action-title">Desfragmentar / Otimizar <span class="tag tag-safe">seguro</span></div>
+<p class="action-desc">Roda <code>Optimize-Volume</code> que detecta automaticamente o tipo de disco e aplica a operacao correta.</p>
+<h4>Comportamento</h4>
+<ul class="action-fields">
+<li><strong>Em HDD:</strong> desfragmenta arquivos (junta blocos espalhados) -> melhora velocidade de leitura</li>
+<li><strong>Em SSD:</strong> roda TRIM (avisa o controlador quais celulas estao livres) -> mantem performance ao longo do tempo</li>
+</ul>
+</div>
+
+<div class="action-card" id="wipefree">
+<div class="action-title">Limpar espaco livre <span class="tag tag-backup">tempo longo</span></div>
+<p class="action-desc">Sobrescreve com zeros toda a area marcada como livre no disco. Internamente roda <code>cipher /w</code>.</p>
+<h4>Pra que serve</h4>
+<p>Quando voce apaga arquivos no Windows, eles continuam fisicamente no disco ate serem sobrescritos. Software de recuperacao consegue recuperar. Esta acao torna isso impossivel sobrescrevendo a area livre.</p>
+<h4>Casos de uso</h4>
+<ul class="action-fields">
+<li>Antes de doar/vender um PC ou HDD</li>
+<li>Apos apagar dados sensiveis e querer garantir</li>
+<li>Em maquinas onde houve vazamento de dados</li>
+</ul>
+<div class="aviso"><strong>Demora bastante:</strong> 1-3 horas em discos de 500 GB-1 TB, mais em discos maiores. Nao interromper.</div>
+</div>
+
+<!-- ============================= -->
+<h2>7. BACKUP <span class="tag tag-backup">copia / snapshot</span></h2>
+<!-- ============================= -->
+
+<div class="action-card" id="backupuser">
+<div class="action-title">Backup arquivos de usuario <span class="tag tag-safe">seguro</span></div>
+<p class="action-desc">Copia pastas pessoais (Desktop, Documentos, Imagens, Videos, Musica, Downloads, AppData, Favoritos) de um ou varios perfis de usuario pra um disco destino. Pasta destino e <code>D:\Backup_2026-05-25_1430</code> (com timestamp pra nao sobrescrever).</p>
+<h4>Como funciona</h4>
+<ul class="action-fields">
+<li>Lista todos os perfis em <code>C:\Users</code> (exceto perfis de sistema)</li>
+<li>Voce marca quais perfis copiar (CheckedListBox)</li>
+<li>Marca quais pastas dentro de cada perfil (checkboxes)</li>
+<li>Usa <code>robocopy /E /MT:8 /R:1 /W:1</code> -> multi-thread (8 threads), retoma se cair conexao, pula arquivos travados</li>
+</ul>
+<div class="info">Funciona com o sistema rodando. Nao precisa fechar programas.</div>
+</div>
+
+<div class="action-card" id="clonedados">
+<div class="action-title">Clonar disco de dados <span class="tag tag-safe">seguro</span></div>
+<p class="action-desc">Espelha o conteudo de um volume em outro. So para discos de dados (D:, E:, etc), NAO funciona pra C: enquanto Windows esta rodando.</p>
+<h4>Opcoes</h4>
+<ul class="action-fields">
+<li><strong>Modo padrao (/E):</strong> copia tudo, mas nao apaga arquivos no destino que nao existem na origem</li>
+<li><strong>Modo espelho (/MIR):</strong> espelho exato - apaga no destino arquivos que sumiram na origem</li>
+</ul>
+<div class="aviso">Pra <strong>clone bootavel do C:</strong> (migrar HDD pra SSD com Windows funcionando), use <a href="https://www.macrium.com/reflectfree">Macrium Reflect Free</a> ou Clonezilla. O Disk Toolkit nao tenta isso porque exige boot externo e ferramentas dedicadas.</div>
+</div>
+
+<div class="action-card" id="vhdx">
+<div class="action-title">Imagem VHDX (snapshot do C:) <span class="tag tag-backup">snapshot</span></div>
+<p class="action-desc">Cria um arquivo <code>.vhdx</code> contendo um snapshot do C: tirado <strong>a quente</strong> (sem desligar Windows) usando <a href="https://learn.microsoft.com/en-us/sysinternals/downloads/disk2vhd">Disk2VHD da Sysinternals</a>.</p>
+<h4>Pra que serve</h4>
+<ul class="action-fields">
+<li><strong>Backup antes de operacao arriscada:</strong> instalar driver novo, atualizar sistema, mudar particoes</li>
+<li><strong>Recuperar arquivos:</strong> se o Windows corromper e nao bootar mais, voce monta a VHDX em outro PC (botao direito -> Mount) e extrai documentos</li>
+<li><strong>Transformar PC fisico em VM:</strong> abrir a VHDX no Hyper-V ou VirtualBox</li>
+</ul>
+<h4>Pra que NAO serve</h4>
+<ul class="action-fields">
+<li>Nao substitui o System Restore (snapshots automaticos do Windows)</li>
+<li>Nao e auto-atualizado - e snapshot do momento, precisa recriar pra ter fresco</li>
+<li>Nao e diretamente bootavel - pra usar como sistema, precisa restaurar em outro disco</li>
+</ul>
+<div class="info">O Disk2VHD e baixado automaticamente na primeira execucao se nao existir em <code>%TEMP%</code>.</div>
+</div>
+
+<!-- ============================= -->
+<h2>8. USUARIOS <span class="tag tag-user">limpeza de perfis</span></h2>
+<!-- ============================= -->
+
+<div class="action-card" id="users">
+<div class="action-title">Listar e apagar perfis de usuario <span class="tag tag-danger">destrutiva</span></div>
+<p class="action-desc">Lista todos os perfis locais do Windows com nome, tamanho ocupado em disco, ultimo uso e status (em uso ou disponivel). Permite apagar perfis antigos que estao ocupando espaco a toa.</p>
+<h4>O que o apagar realmente faz</h4>
+<ol class="action-fields">
+<li>Remove o perfil via <code>Win32_UserProfile</code> (WMI) - limpa registro do ProfileList</li>
+<li>Remove a conta local via <code>Remove-LocalUser</code></li>
+<li>Apaga a pasta <code>C:\Users\nome</code> se ainda restou algo</li>
+</ol>
+<h4>Travas de seguranca</h4>
+<ul class="action-fields">
+<li>Perfil em uso (Loaded=true) aparece em cinza e bloqueado</li>
+<li>Perfis de sistema (Administrator, Guest, DefaultAccount, WDAGUtilityAccount) bloqueados</li>
+<li>Confirmacao Yes/No antes de executar</li>
+</ul>
+<div class="info">Util quando voce ajuda outro usuario e quer remover seu proprio perfil "tecnico" que criou pra fazer manutencao no PC dele, sem deixar lixo.</div>
+</div>
+
+<!-- ============================= -->
+<h2>9. Padroes de Seguranca</h2>
+<!-- ============================= -->
+
+<table>
+<tr><th>Trava</th><th>Detalhe</th></tr>
+<tr><td>Admin obrigatorio</td><td>Verificacao logo na abertura. Se nao for admin, mensagem em vermelho e encerra.</td></tr>
+<tr><td>Disco do sistema oculto</td><td>Em todas as listas de acoes destrutivas, o disco que contem C: nao aparece. Detectado via registry (<code>HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRoot</code>) + fallback Get-Disk IsBoot/IsSystem.</td></tr>
+<tr><td>Re-verificacao antes de executar</td><td>Em Wipe & Format, conferimos de novo (entre selecao e execucao) que o disco escolhido nao virou o sistema por alguma razao.</td></tr>
+<tr><td>Confirmacao dupla</td><td>Botao Executar + dialog YesNo com detalhes do que vai acontecer.</td></tr>
+<tr><td>Perfil em uso protegido</td><td>Nao da pra deletar perfil carregado (Loaded=true).</td></tr>
+<tr><td>Bloqueio de C: como origem de clone</td><td>Windows nao deixa copiar arquivos travados do sistema rodando - bloqueamos antes pra evitar resultado corrompido.</td></tr>
+<tr><td>Try/catch global</td><td>Qualquer erro durante operacao mostra mensagem detalhada em dialog. Nao trava a janela.</td></tr>
+</table>
+
+<!-- ============================= -->
+<h2>10. Operacoes que NAO Estao Inclusas (e por que)</h2>
+<!-- ============================= -->
+
+<table>
+<tr><th>Operacao</th><th>Por que nao</th><th>Alternativa</th></tr>
+<tr><td>Clone bootavel do C:</td><td>Nao da pra fazer com sistema rodando. Requer Windows PE ou boot externo.</td><td><a href="https://www.macrium.com/reflectfree">Macrium Reflect Free</a> ou Clonezilla</td></tr>
+<tr><td>Recuperacao de arquivos deletados</td><td>Tem ferramentas dedicadas muito melhores e gratuitas.</td><td>TestDisk, PhotoRec, Recuva</td></tr>
+<tr><td>Benchmark de velocidade</td><td>Existem ferramentas especializadas.</td><td>CrystalDiskMark, AS SSD Benchmark</td></tr>
+<tr><td>Storage Spaces / RAID software</td><td>Caso de uso muito especifico, complexo demais pra GUI generica.</td><td>Manage Storage Spaces no Painel de Controle</td></tr>
+<tr><td>Secure erase DoD (3-7 passes)</td><td>Pode ser adicionado no futuro como Tier 3. Hoje so quick wipe + cipher /w (1 pass).</td><td>DBAN, Eraser, ATA Secure Erase via vendor</td></tr>
+<tr><td>BitLocker setup</td><td>Pode ser adicionado no futuro. Configuracao tem muitos parametros.</td><td>Painel de Controle -> BitLocker</td></tr>
+<tr><td>Restaurar VHDX em disco fisico</td><td>Pode ser adicionado. Hoje so cria a imagem, nao restaura.</td><td>Disk2VHD com flag de restore, ou Hyper-V</td></tr>
+</table>
+
+<!-- ============================= -->
+<h2>11. Estrutura Tecnica</h2>
+<!-- ============================= -->
+
+<h3>Arquivos no repositorio</h3>
+<table>
+<tr><th>Arquivo</th><th>Funcao</th></tr>
+<tr><td><code>disk-toolkit.ps1</code></td><td>Este script (520+ linhas, GUI WinForms com as 14 acoes)</td></tr>
+<tr><td><code>prepare-storage.ps1</code></td><td>Versao focada/menor que so faz Wipe & Format</td></tr>
+<tr><td><code>setup.ps1</code></td><td>Script de pos-formatacao (instala programas, remove bloatware) - nao relacionado</td></tr>
+<tr><td><code>README.md</code></td><td>Documentacao em markdown</td></tr>
+<tr><td><code>disk-toolkit-docs.html</code></td><td>Este documento</td></tr>
+</table>
+
+<h3>Cmdlets nativos do PowerShell usados</h3>
+<ul>
+<li><code>Get-Disk</code>, <code>Get-Partition</code>, <code>Get-Volume</code>, <code>Get-PhysicalDisk</code> - listagens</li>
+<li><code>Clear-Disk</code>, <code>Initialize-Disk</code>, <code>New-Partition</code>, <code>Format-Volume</code> - particionamento</li>
+<li><code>Set-Volume</code>, <code>Set-Partition</code> - mudancas em volume/particao existentes</li>
+<li><code>Resize-Partition</code>, <code>Get-PartitionSupportedSize</code> - redimensionar</li>
+<li><code>Optimize-Volume</code> - defrag/TRIM</li>
+<li><code>Get-StorageReliabilityCounter</code> - dados SMART</li>
+<li><code>Get-CimInstance Win32_UserProfile</code>, <code>Remove-CimInstance</code>, <code>Remove-LocalUser</code> - perfis</li>
+</ul>
+
+<h3>Comandos externos</h3>
+<ul>
+<li><code>chkdsk</code> - verificacao filesystem</li>
+<li><code>cipher /w</code> - limpar espaco livre</li>
+<li><code>robocopy</code> - copia multi-thread</li>
+<li><code>disk2vhd.exe</code> - snapshot VHDX (baixado da Sysinternals na primeira execucao)</li>
+</ul>
+
+<!-- ============================= -->
+<h2>12. FAQ</h2>
+<!-- ============================= -->
+
+<h3>Posso usar esse script em qualquer PC Windows?</h3>
+<p>Sim, em Windows 10 e Windows 11. Versoes mais antigas (Win 7/8) podem nao ter os cmdlets necessarios.</p>
+
+<h3>O script muda algo no sistema sem eu pedir?</h3>
+<p>Nao. Cada acao so executa quando voce clica em <strong>Executar Acao</strong>. As acoes destrutivas ainda pedem confirmacao adicional.</p>
+
+<h3>Da pra desfazer um Wipe & Format?</h3>
+<p>Nao. Apos formatar, dados podem ser parcialmente recuperaveis com forensica especializada, mas pra uso pratico considere perdido. Por isso a confirmacao dupla.</p>
+
+<h3>Por que disco do sistema nao aparece nas listas?</h3>
+<p>Trava de seguranca proposital. Se voce precisa mexer no C:, use ferramentas dedicadas (Gerenciamento de Disco do Windows, ou ferramentas de boot externo).</p>
+
+<h3>O script roda em ARM Windows?</h3>
+<p>Provavelmente sim, mas nao foi testado. Os cmdlets usados sao nativos do PowerShell e funcionam em todas arquiteturas. Disk2VHD pode ser exclusivamente x64.</p>
+
+<h3>Algum dado e enviado pra internet?</h3>
+<p>Nao. Tudo roda local. As unicas conexoes de rede sao: (1) download inicial do script via <code>irm</code>, (2) download do Disk2VHD na primeira execucao da acao VHDX. Nenhum dado de disco ou usuario sai do PC.</p>
+
+<hr>
+
+<p style="text-align: center; color: #888; font-size: 13px;">
+Repositorio: <a href="https://github.com/GCintra00/formatei-pc">github.com/GCintra00/formatei-pc</a> &nbsp;|&nbsp;
+Autor: <a href="https://github.com/GCintra00">GCintra00</a>
+</p>
+
+</body>
+</html>
