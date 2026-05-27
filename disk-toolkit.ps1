@@ -91,6 +91,9 @@ function Get-VolumeDropdownItems {
 # Estrutura: nome interno, nome amigavel, categoria, descricao, funcao a chamar
 
 $script:actions = @(
+    # === AJUDA ===
+    @{Id='helpcmds'; Name='Comandos GCintra00 (cheat sheet)'; Cat='AJUDA'; Desc='Lista de todos os scripts da conta GCintra00 que rodam via "irm | iex". Util pra lembrar rapido os outros comandos quando ta atendendo um PC. Selecione o texto e Ctrl+C pra copiar.'},
+
     # === INFORMACAO ===
     @{Id='smart'; Name='S.M.A.R.T. (Saude do disco)'; Cat='INFORMACAO'; Desc='Le o status auto-reportado pelo proprio drive. Mostra saude geral (OK/Warning/Critical), horas de uso, temperatura, setores realocados e contagem de erros. Util pra detectar disco em pre-falha antes que dê problema serio.'},
     @{Id='info'; Name='Informacoes detalhadas'; Cat='INFORMACAO'; Desc='Mostra tudo que da pra saber sobre um disco: modelo, serial, firmware, tipo (HDD/SSD/NVMe), tabela (GPT/MBR), barramento (SATA/USB/NVMe), tamanho total, particoes existentes e seus filesystems.'},
@@ -113,12 +116,12 @@ $script:actions = @(
     @{Id='vhdx'; Name='Imagem VHDX (snapshot do C:)'; Cat='BACKUP'; Desc='Cria um arquivo .vhdx no disco destino contendo um snapshot do C: tirado a quente via VSS (sem desligar). Util como backup antes de operacoes arriscadas, ou pra recuperar dados se o Windows corromper depois. Use Disk2VHD da Sysinternals.'},
 
     # === USUARIOS ===
-    @{Id='users'; Name='Listar e apagar perfis de usuario'; Cat='USUARIOS'; Desc='Lista todos os perfis locais do Windows com nome, tamanho ocupado em disco e ultimo login. Permite apagar perfis antigos (remove pasta C:\Users\xyz + conta + entrada no registro) pra liberar espaco. Bloqueia o perfil em uso (voce nao consegue apagar quem ta logado).'},
+    @{Id='users'; Name='Listar e apagar perfis de usuario'; Cat='USUARIOS'; Desc='Lista todos os perfis locais do Windows com nome, tamanho ocupado em disco e ultimo login. Permite apagar perfis antigos (remove pasta C:\Users\xyz + conta + entrada no registro). Se o usuario escolhido estiver LOGADO, faz logoff forcado automaticamente antes de apagar. So bloqueia se voce tentar apagar sua propria conta (esta logada agora).'},
     @{Id='createuser'; Name='Criar novo usuario local'; Cat='USUARIOS'; Desc='Cria uma conta LOCAL do Windows (sem vinculo com conta Microsoft) com nome de usuario e senha definidos por voce. Opcionalmente da privilegio de Administrador. Util pra criar conta tecnica em PCs em manutencao ou conta nova pra um colaborador.'},
 
     # === REDE ===
     @{Id='share'; Name='Compartilhar pasta na rede (SMB)'; Cat='REDE'; Desc='Cria um compartilhamento SMB de uma pasta no PC, com usuario/senha de acesso. Configura permissoes NTFS, abre o firewall pra SMB e devolve o caminho UNC (\\IP\Nome) pra acessar de outras maquinas Windows. Util pra disponibilizar uma pasta de trabalho ou backup acessivel pela rede interna - estilo Move Docs.'},
-    @{Id='listshares'; Name='Listar compartilhamentos ativos'; Cat='REDE'; Desc='Mostra todos os compartilhamentos SMB ativos no PC: nome, caminho local, descricao e contagem de conexoes. Permite identificar e remover compartilhamentos antigos.'}
+    @{Id='listshares'; Name='Cortar compartilhamento de rede'; Cat='REDE'; Desc='Lista todos os compartilhamentos SMB ativos no PC (ocultos C$/ADMIN$ ja filtrados). Selecione um e clique Executar pra remove-lo. Nao apaga a pasta nem o usuario, so para de compartilhar.'}
 )
 
 # ============= UI =============
@@ -254,6 +257,52 @@ function Build-Panel($actionId) {
     $script:ctx = @{}
 
     switch ($actionId) {
+        'helpcmds' {
+            Add-Label 10 10 460 22 "Scripts GCintra00 (selecione + Ctrl+C pra copiar):" $true
+            $tb = New-Object System.Windows.Forms.TextBox
+            $tb.Location = New-Object System.Drawing.Point(10, 35)
+            $tb.Size = New-Object System.Drawing.Size(460, 235)
+            $tb.Multiline = $true
+            $tb.ReadOnly = $true
+            $tb.ScrollBars = "Vertical"
+            $tb.Font = New-Object System.Drawing.Font("Consolas", 9)
+            $tb.Text = @'
+=== SETUP COMPLETO DE PC NOVO (8 etapas) ===
+Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex
+
+=== SETUP LIGHT (so Chrome + limpezas) ===
+Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex
+
+=== DISK TOOLKIT (esta ferramenta) ===
+irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/disk-toolkit.ps1 | iex
+
+=== PREPARAR HDD STORAGE (wipe + format NTFS) ===
+irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/prepare-storage.ps1 | iex
+
+=== LIMPEZA DO SISTEMA (cache, cookies, temp) ===
+irm https://raw.githubusercontent.com/GCintra00/limpeza/master/limpeza.ps1 | iex
+
+=== UTILITARIOS RAPIDOS ===
+
+# Corrigir DNS pra Google (pre-requisito qdo DNS do PC esta quebrado)
+Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }
+
+# Pegar serial do PC
+(Get-CimInstance Win32_BIOS).SerialNumber
+
+# Pegar IP LAN da maquina
+(Get-NetIPAddress -AddressFamily IPv4 | Where { $_.PrefixOrigin -in 'Dhcp','Manual' -and $_.IPAddress -notlike '169.*' -and $_.IPAddress -notlike '127.*' } | Select -First 1).IPAddress
+
+# Listar usuarios locais
+Get-LocalUser | Where Enabled | Format-Table Name, FullName, LastLogon
+
+# Listar compartilhamentos SMB ativos
+Get-SmbShare | Where { -not $_.Special }
+
+DICA: todos precisam PowerShell como Administrador.
+'@
+            $paramPanel.Controls.Add($tb)
+        }
         'smart' {
             Add-Label 10 10 200 22 "Selecione o disco:" $true
             $script:ctx.disk = Add-Combo 10 35 460 (Get-DiskDropdownItems $true)
@@ -509,6 +558,7 @@ function Execute-Action($id) {
 
     try {
         switch ($id) {
+            'helpcmds'   { Show-Msg "Este painel e so consulta. Selecione o texto e copie pro PowerShell." "Cheat sheet" "Information" }
             'smart'      { Exec-Smart }
             'info'       { Exec-Info }
             'wipe'       { Exec-Wipe }
@@ -747,15 +797,53 @@ function Exec-DeleteUser {
     $path = $item.Tag
     $status = $item.SubItems[3].Text
 
-    if ($status -eq "EM USO") { Show-Msg "Perfil em uso, nao pode ser removido." 'Aviso' 'Warning'; return }
     if ($name -in @('Administrator','DefaultAccount','Guest','WDAGUtilityAccount')) {
         Show-Msg "Perfil de sistema, nao remova." 'Aviso' 'Warning'; return
     }
 
-    if (-not (Confirm-Action "Apagar perfil '$name' completamente?`n`nIsso remove:`n - Pasta $path`n - Conta de usuario local`n - Entradas no registro`n`nIrreversivel.")) { return }
+    # Bloqueia auto-delete (nao pode apagar o proprio usuario logado)
+    $currentUser = "$env:USERNAME"
+    if ($name -eq $currentUser) {
+        Show-Msg "Voce esta logado nessa conta agora. Faca logoff e use outra conta admin pra apagar essa." 'Aviso' 'Warning'
+        return
+    }
+
+    $isLoggedIn = ($status -eq "EM USO")
+    $extraMsg = if ($isLoggedIn) { "`n`nATENCAO: O usuario esta LOGADO agora. Vai ser deslogado automaticamente antes de apagar." } else { "" }
+
+    if (-not (Confirm-Action "Apagar perfil '$name' completamente?$extraMsg`n`nIsso remove:`n - Pasta $path`n - Conta de usuario local`n - Entradas no registro`n`nIrreversivel.")) { return }
+
+    # 0. Se logado, fazer logoff forçado primeiro
+    if ($isLoggedIn) {
+        Set-Status "Deslogando '$name'..." ([System.Drawing.Color]::DarkOrange)
+        try {
+            $sessions = quser 2>$null
+            foreach ($line in $sessions) {
+                # Formato tipico: " USERNAME       sessionname  id  STATE   IDLE TIME  LOGON TIME"
+                if ($line -match "^\s*>?\s*(\S+)\s+(\S+)?\s+(\d+)\s+") {
+                    $sessUser = $matches[1].TrimStart('>').Trim()
+                    $sessId = $matches[3]
+                    if ($sessUser -ieq $name) {
+                        logoff $sessId 2>$null
+                        Start-Sleep -Seconds 2
+                        break
+                    }
+                }
+            }
+        } catch {
+            Show-Msg "Erro ao deslogar '$name': $($_.Exception.Message)" 'Erro' 'Error'
+            return
+        }
+    }
 
     # 1. Remover via Win32_UserProfile (limpa registro tambem)
-    Get-CimInstance Win32_UserProfile | Where-Object { $_.LocalPath -eq $path } | Remove-CimInstance -ErrorAction Stop
+    try {
+        Get-CimInstance Win32_UserProfile | Where-Object { $_.LocalPath -eq $path } | Remove-CimInstance -ErrorAction Stop
+    } catch {
+        # Pode falhar se ainda estiver "loaded" - aguardar um pouco e tentar de novo
+        Start-Sleep -Seconds 3
+        Get-CimInstance Win32_UserProfile | Where-Object { $_.LocalPath -eq $path } | Remove-CimInstance -ErrorAction Stop
+    }
 
     # 2. Remover a conta de usuario (se existir)
     try { Remove-LocalUser -Name $name -ErrorAction Stop } catch {}
@@ -765,8 +853,9 @@ function Exec-DeleteUser {
         Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    Show-Msg "Perfil '$name' apagado." "Sucesso"
-    Set-Status "Perfil $name removido" ([System.Drawing.Color]::DarkGreen)
+    $sufix = if ($isLoggedIn) { " (apos logoff forcado)" } else { "" }
+    Show-Msg "Perfil '$name' apagado$sufix." "Sucesso"
+    Set-Status "Perfil $name removido$sufix" ([System.Drawing.Color]::DarkGreen)
     Build-Panel 'users'  # refresh lista
 }
 

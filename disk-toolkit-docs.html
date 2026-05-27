@@ -123,6 +123,7 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 
 <div class="toc">
 <ul>
+<li><a href="#helpcmds">Comandos GCintra00 (cheat sheet)</a></li>
 <li><a href="#smart">S.M.A.R.T. (Saude do disco)</a></li>
 <li><a href="#info">Informacoes detalhadas</a></li>
 <li><a href="#wipe">Apagar e formatar (Wipe & Format)</a></li>
@@ -141,6 +142,24 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li><a href="#share">Compartilhar pasta na rede (SMB)</a></li>
 <li><a href="#listshares">Listar compartilhamentos ativos</a></li>
 </ul>
+</div>
+
+<!-- ============================= -->
+<h2>3.5. AJUDA <span class="tag tag-info">consulta</span></h2>
+<!-- ============================= -->
+
+<div class="action-card" id="helpcmds">
+<div class="action-title">Comandos GCintra00 (cheat sheet) <span class="tag tag-safe">consulta</span></div>
+<p class="action-desc">Painel de consulta com os comandos prontos pra copiar e colar no PowerShell. Inclui todos os scripts da conta GCintra00:</p>
+<ul class="action-fields">
+<li><strong>Setup completo</strong> (setup.ps1) - 8 etapas de configuracao pos-formatacao</li>
+<li><strong>Setup light</strong> (setup-light.ps1) - so Chrome + limpezas</li>
+<li><strong>Disk Toolkit</strong> (este script) - link de auto-referencia</li>
+<li><strong>Preparar HDD Storage</strong> (prepare-storage.ps1) - Wipe & Format focado</li>
+<li><strong>Limpeza do Sistema</strong> (limpeza.ps1) - cache/cookies/temp</li>
+<li><strong>Utilitarios rapidos:</strong> corrigir DNS, pegar serial do PC, IP LAN, listar usuarios, listar shares</li>
+</ul>
+<div class="info">O painel e somente leitura. Selecione texto e Ctrl+C pra copiar pro clipboard. Botao "Executar Acao" so mostra uma mensagem informativa.</div>
 </div>
 
 <!-- ============================= -->
@@ -331,11 +350,12 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li>Remove a conta local via <code>Remove-LocalUser</code></li>
 <li>Apaga a pasta <code>C:\Users\nome</code> se ainda restou algo</li>
 </ol>
-<h4>Travas de seguranca</h4>
+<h4>Travas de seguranca e comportamento</h4>
 <ul class="action-fields">
-<li>Perfil em uso (Loaded=true) aparece em cinza e bloqueado</li>
-<li>Perfis de sistema (Administrator, Guest, DefaultAccount, WDAGUtilityAccount) bloqueados</li>
-<li>Confirmacao Yes/No antes de executar</li>
+<li><strong>Auto-logoff de usuario logado:</strong> se o perfil escolhido estiver logado agora, o script descobre o sessionId via <code>quser</code> e roda <code>logoff &lt;id&gt;</code> antes de apagar. Confirmacao avisa que vai fazer isso.</li>
+<li><strong>Auto-protecao:</strong> nao apaga sua propria conta (a que esta rodando o script). Bloqueia se voce tentar.</li>
+<li><strong>Perfis de sistema bloqueados:</strong> Administrator, Guest, DefaultAccount, WDAGUtilityAccount.</li>
+<li>Confirmacao Yes/No antes de executar.</li>
 </ul>
 <div class="info">Util quando voce ajuda outro usuario e quer remover seu proprio perfil "tecnico" que criou pra fazer manutencao no PC dele, sem deixar lixo.</div>
 </div>
@@ -415,8 +435,8 @@ ACESSO DE OUTRAS MAQUINAS WINDOWS:
 </div>
 
 <div class="action-card" id="listshares">
-<div class="action-title">Listar compartilhamentos ativos <span class="tag tag-safe">leitura / remocao</span></div>
-<p class="action-desc">Mostra todos os compartilhamentos SMB ativos no PC (oculta os administrativos do Windows como C$, ADMIN$). Permite remover selecionando + Executar.</p>
+<div class="action-title">Cortar compartilhamento de rede <span class="tag tag-safe">remocao</span></div>
+<p class="action-desc">Lista todos os compartilhamentos SMB ativos no PC (oculta os administrativos C$/ADMIN$/IPC$). Selecione um e clique "Executar Acao" pra remove-lo da rede.</p>
 <h4>Colunas</h4>
 <ul class="action-fields">
 <li>Nome do share (como aparece em <code>\\IP\nome</code>)</li>
