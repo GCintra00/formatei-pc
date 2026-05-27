@@ -378,8 +378,12 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <ul class="action-fields">
 <li><strong>Pasta a compartilhar:</strong> qualquer pasta. Tem botao "Procurar..." que abre o seletor de pastas.</li>
 <li><strong>Nome do compartilhamento:</strong> o "X" no <code>\\IP\X</code>. Preenchido automaticamente com o nome da pasta quando voce escolhe.</li>
-<li><strong>Usuario / Senha:</strong> conta de acesso. Se nao existir e o checkbox "Criar usuario" estiver marcado, e criada como conta local.</li>
-<li><strong>Criar usuario:</strong> marca por padrao - se o user nao existe, cria.</li>
+<li><strong>Usuario de acesso:</strong> escolha entre 2 modos via radio button:
+    <ul>
+    <li><strong>Usuario existente:</strong> dropdown lista todos os usuarios locais habilitados do PC. Voce escolhe um e digita a senha dele (usada por quem conectar pela rede; o script nao altera nem valida).</li>
+    <li><strong>Criar novo:</strong> textbox pra nome e senha. Cria conta local nova (PasswordNeverExpires, AccountNeverExpires).</li>
+    </ul>
+</li>
 <li><strong>Permitir escrita:</strong> marca por padrao. Desmarcado = somente leitura.</li>
 </ul>
 <h4>O que a acao faz</h4>

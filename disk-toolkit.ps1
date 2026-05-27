@@ -393,14 +393,43 @@ function Build-Panel($actionId) {
             $script:ctx.shareName = Add-Textbox 10 95 230
             Add-Label 245 70 220 22 "(sem caracteres especiais)" $false
 
-            Add-Label 10 130 200 22 "Usuario de acesso:" $true
-            $script:ctx.shareUser = Add-Textbox 10 155 200
-            Add-Label 220 130 200 22 "Senha:" $true
-            $script:ctx.sharePwd = Add-Textbox 220 155 200
-            $script:ctx.sharePwd.UseSystemPasswordChar = $true
+            Add-Label 10 130 460 22 "Usuario de acesso:" $true
 
-            $script:ctx.shareCreate = Add-Checkbox 10 185 460 "Criar usuario se nao existir (recomendado)" $true
-            $script:ctx.shareFull = Add-Checkbox 10 210 460 "Permitir escrita (desmarcado = somente leitura)" $true
+            # Radio 1: Usuario existente (dropdown + senha)
+            $script:ctx.rbExisting = New-Object System.Windows.Forms.RadioButton
+            $script:ctx.rbExisting.Text = "Usuario existente"
+            $script:ctx.rbExisting.Location = New-Object System.Drawing.Point(10, 155)
+            $script:ctx.rbExisting.Size = New-Object System.Drawing.Size(140, 22)
+            $script:ctx.rbExisting.Checked = $true
+            $paramPanel.Controls.Add($script:ctx.rbExisting)
+
+            $script:ctx.cmbExisting = New-Object System.Windows.Forms.ComboBox
+            $script:ctx.cmbExisting.Location = New-Object System.Drawing.Point(160, 155)
+            $script:ctx.cmbExisting.Size = New-Object System.Drawing.Size(165, 22)
+            $script:ctx.cmbExisting.DropDownStyle = "DropDownList"
+            foreach ($u in (Get-LocalUser -ErrorAction SilentlyContinue | Where-Object { $_.Enabled })) {
+                $script:ctx.cmbExisting.Items.Add($u.Name) | Out-Null
+            }
+            if ($script:ctx.cmbExisting.Items.Count -gt 0) { $script:ctx.cmbExisting.SelectedIndex = 0 }
+            $paramPanel.Controls.Add($script:ctx.cmbExisting)
+
+            Add-Label 335 155 50 22 "Senha:" $false
+            $script:ctx.pwdExisting = Add-Textbox 385 155 85
+            $script:ctx.pwdExisting.UseSystemPasswordChar = $true
+
+            # Radio 2: Criar novo (textbox + senha)
+            $script:ctx.rbNew = New-Object System.Windows.Forms.RadioButton
+            $script:ctx.rbNew.Text = "Criar novo"
+            $script:ctx.rbNew.Location = New-Object System.Drawing.Point(10, 185)
+            $script:ctx.rbNew.Size = New-Object System.Drawing.Size(140, 22)
+            $paramPanel.Controls.Add($script:ctx.rbNew)
+
+            $script:ctx.txtNew = Add-Textbox 160 185 165
+            Add-Label 335 185 50 22 "Senha:" $false
+            $script:ctx.pwdNew = Add-Textbox 385 185 85
+            $script:ctx.pwdNew.UseSystemPasswordChar = $true
+
+            $script:ctx.shareFull = Add-Checkbox 10 220 460 "Permitir escrita (desmarcado = somente leitura)" $true
         }
         'listshares' {
             Add-Label 10 10 460 22 "Compartilhamentos ativos (selecione para remover):" $true
@@ -806,15 +835,23 @@ function Get-LanIPv4 {
 function Exec-Share {
     $path = $script:ctx.folderPath.Text.Trim()
     $shareName = $script:ctx.shareName.Text.Trim()
-    $user = $script:ctx.shareUser.Text.Trim()
-    $pwd = $script:ctx.sharePwd.Text
-    $createUser = $script:ctx.shareCreate.Checked
     $fullAccess = $script:ctx.shareFull.Checked
+
+    # Determinar user/senha conforme o radio
+    if ($script:ctx.rbExisting.Checked) {
+        $user = if ($script:ctx.cmbExisting.SelectedItem) { $script:ctx.cmbExisting.SelectedItem.ToString() } else { '' }
+        $pwd = $script:ctx.pwdExisting.Text
+        $modeExisting = $true
+    } else {
+        $user = $script:ctx.txtNew.Text.Trim()
+        $pwd = $script:ctx.pwdNew.Text
+        $modeExisting = $false
+    }
 
     if (-not (Test-Path $path -PathType Container)) { Show-Msg "Pasta nao existe: '$path'" 'Erro' 'Error'; return }
     if (-not $shareName) { Show-Msg "Digite o nome do compartilhamento" 'Aviso' 'Warning'; return }
     if ($shareName -match '[\\/:*?"<>|]') { Show-Msg "Nome do compartilhamento contem caracteres invalidos ( \\ / : * ? `" < > | )" 'Aviso' 'Warning'; return }
-    if (-not $user) { Show-Msg "Digite o nome do usuario de acesso" 'Aviso' 'Warning'; return }
+    if (-not $user) { Show-Msg "Selecione ou digite um usuario." 'Aviso' 'Warning'; return }
 
     # Share ja existe?
     if (Get-SmbShare -Name $shareName -ErrorAction SilentlyContinue) {
@@ -822,11 +859,17 @@ function Exec-Share {
         Remove-SmbShare -Name $shareName -Force -ErrorAction Stop
     }
 
-    # Cria usuario se nao existir
+    # Usuario: existente ou novo
     $existingUser = Get-LocalUser -Name $user -ErrorAction SilentlyContinue
-    if (-not $existingUser) {
-        if (-not $createUser) { Show-Msg "Usuario '$user' nao existe e checkbox 'Criar usuario' nao esta marcada." 'Erro' 'Error'; return }
-        if (-not $pwd) { Show-Msg "Pra criar o usuario, digite uma senha." 'Aviso' 'Warning'; return }
+    if ($modeExisting) {
+        if (-not $existingUser) { Show-Msg "Usuario '$user' nao existe (mudou de estado?). Recarrega o painel." 'Erro' 'Error'; return }
+        if (-not $pwd) { Show-Msg "Digite a senha do usuario '$user' (vai ser usada por quem conectar pela rede)." 'Aviso' 'Warning'; return }
+        # Em modo 'existente', a senha eh so pra exibir no dialog final - nao validamos nem alteramos
+    } else {
+        if ($existingUser) {
+            Show-Msg "Usuario '$user' ja existe. Use a opcao 'Usuario existente'." 'Aviso' 'Warning'; return
+        }
+        if (-not $pwd) { Show-Msg "Digite uma senha pro novo usuario." 'Aviso' 'Warning'; return }
         $securePwd = ConvertTo-SecureString $pwd -AsPlainText -Force
         New-LocalUser -Name $user -Password $securePwd -AccountNeverExpires -PasswordNeverExpires -ErrorAction Stop | Out-Null
     }
