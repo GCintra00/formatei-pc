@@ -416,8 +416,8 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li>Detecta o IPv4 da rede local (ignora 127.x.x.x e 169.254.x.x)</li>
 <li>Mostra dialog com tudo: UNC, IP, usuario, senha, permissoes</li>
 </ol>
-<h4>Aviso de rede publica</h4>
-<p>Se o perfil de rede ativo estiver como <strong>Publica</strong>, o Windows bloqueia descoberta de SMB. O dialog avisa pra mudar pra Privada em Configuracoes &gt; Rede.</p>
+<h4>Forca rede pra Privada</h4>
+<p>Se o perfil de rede ativo estiver como <strong>Publica</strong>, o script altera automaticamente pra <strong>Privada</strong> (<code>Set-NetConnectionProfile -NetworkCategory Private</code>). Sem isso, o firewall do Windows bloqueia SMB de fora mesmo com a regra do firewall habilitada. O dialog final avisa que essa mudanca ocorreu.</p>
 <h4>Resultado</h4>
 <div class="mockup">COMPARTILHAMENTO CRIADO COM SUCESSO
 

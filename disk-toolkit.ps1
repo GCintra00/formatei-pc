@@ -988,12 +988,18 @@ function Exec-Share {
         Enable-NetFirewallRule -DisplayGroup $grp -ErrorAction SilentlyContinue
     }
 
-    # Verifica perfil de rede
-    $profile = Get-NetConnectionProfile -ErrorAction SilentlyContinue | Select-Object -First 1
-    $profileWarn = ""
-    if ($profile -and $profile.NetworkCategory -eq 'Public') {
-        $profileWarn = "`n`nATENCAO: A rede ativa esta classificada como PUBLICA. Pode bloquear acesso de outras maquinas. Mude pra rede PRIVADA em Configuracoes > Rede > Propriedades."
+    # Forca rede pra Privada (sem isso, firewall bloqueia SMB de fora)
+    $publicProfiles = Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { $_.NetworkCategory -eq 'Public' }
+    $profileChanged = $false
+    if ($publicProfiles) {
+        try {
+            $publicProfiles | Set-NetConnectionProfile -NetworkCategory Private -ErrorAction Stop
+            $profileChanged = $true
+        } catch {}
     }
+    $profileWarn = if ($profileChanged) {
+        "`n`nA rede ativa foi alterada de PUBLICA pra PRIVADA automaticamente (pra permitir acesso pela rede)."
+    } else { "" }
 
     $ip = Get-LanIPv4
     if (-not $ip) { $ip = "<sem IP detectado>" }
