@@ -149,17 +149,26 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <!-- ============================= -->
 
 <div class="action-card" id="helpcmds">
-<div class="action-title">Comandos GCintra00 (cheat sheet) <span class="tag tag-safe">consulta</span></div>
-<p class="action-desc">Painel de consulta com os comandos prontos pra copiar e colar no PowerShell. Inclui todos os scripts da conta GCintra00:</p>
+<div class="action-title">Comandos GCintra00 (cheat sheet) <span class="tag tag-safe">consulta + execucao</span></div>
+<p class="action-desc">Lista os scripts da conta GCintra00 em uma tabela. Clica num script, ve o preview do comando completo, e tem 2 botoes:</p>
 <ul class="action-fields">
-<li><strong>Setup completo</strong> (setup.ps1) - 8 etapas de configuracao pos-formatacao</li>
-<li><strong>Setup light</strong> (setup-light.ps1) - so Chrome + limpezas</li>
-<li><strong>Disk Toolkit</strong> (este script) - link de auto-referencia</li>
+<li><strong>Rodar (nova janela):</strong> abre uma nova janela do PowerShell (admin, herdado da janela atual) e executa o comando via <code>-EncodedCommand</code>. A nova janela fica aberta com <code>-NoExit</code> pra voce ver a saida.</li>
+<li><strong>Copiar pro clipboard:</strong> manda o comando pro <code>Set-Clipboard</code>. Voce cola onde quiser depois.</li>
+</ul>
+<h4>Scripts disponiveis</h4>
+<ul class="action-fields">
+<li><strong>Setup Completo de PC Novo</strong> (setup.ps1) - 8 etapas de configuracao pos-formatacao</li>
+<li><strong>Setup Light</strong> (setup-light.ps1) - so Chrome + limpezas</li>
+<li><strong>Disk Toolkit</strong> (este script) - re-executar</li>
 <li><strong>Preparar HDD Storage</strong> (prepare-storage.ps1) - Wipe & Format focado</li>
 <li><strong>Limpeza do Sistema</strong> (limpeza.ps1) - cache/cookies/temp</li>
-<li><strong>Utilitarios rapidos:</strong> corrigir DNS, pegar serial do PC, IP LAN, listar usuarios, listar shares</li>
+<li><strong>Corrigir DNS</strong> - troca DNS pro Google 8.8.8.8</li>
+<li><strong>Serial Number do PC</strong> - le BIOS</li>
+<li><strong>IP LAN da maquina</strong></li>
+<li><strong>Listar usuarios locais</strong></li>
+<li><strong>Listar compartilhamentos SMB</strong></li>
 </ul>
-<div class="info">O painel e somente leitura. Selecione texto e Ctrl+C pra copiar pro clipboard. Botao "Executar Acao" so mostra uma mensagem informativa.</div>
+<div class="info">O botao "Executar Acao" tambem dispara o "Rodar (nova janela)" do script selecionado, como atalho.</div>
 </div>
 
 <!-- ============================= -->

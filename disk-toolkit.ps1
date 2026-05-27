@@ -258,50 +258,78 @@ function Build-Panel($actionId) {
 
     switch ($actionId) {
         'helpcmds' {
-            Add-Label 10 10 460 22 "Scripts GCintra00 (selecione + Ctrl+C pra copiar):" $true
-            $tb = New-Object System.Windows.Forms.TextBox
-            $tb.Location = New-Object System.Drawing.Point(10, 35)
-            $tb.Size = New-Object System.Drawing.Size(460, 235)
-            $tb.Multiline = $true
-            $tb.ReadOnly = $true
-            $tb.ScrollBars = "Vertical"
-            $tb.Font = New-Object System.Drawing.Font("Consolas", 9)
-            $tb.Text = @'
-=== SETUP COMPLETO DE PC NOVO (8 etapas) ===
-Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex
+            Add-Label 10 10 460 22 "Scripts GCintra00 (selecione + use os botoes abaixo):" $true
 
-=== SETUP LIGHT (so Chrome + limpezas) ===
-Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex
+            $script:helpCmds = @(
+                @{Name='Setup Completo de PC Novo'; Desc='8 etapas: bloatware + programas + config'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex'},
+                @{Name='Setup Light'; Desc='so Chrome + limpezas (mais rapido)'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex'},
+                @{Name='Disk Toolkit'; Desc='esta ferramenta (re-executar)'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/disk-toolkit.ps1 | iex'},
+                @{Name='Preparar HDD Storage'; Desc='wipe + format NTFS focado'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/prepare-storage.ps1 | iex'},
+                @{Name='Limpeza do Sistema'; Desc='cache, cookies, temp'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/limpeza.ps1 | iex'},
+                @{Name='Corrigir DNS (Google 8.8.8.8)'; Desc='resolve DNS quebrado em PCs recem-formatados'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }'},
+                @{Name='Serial Number do PC'; Desc='mostra serial da BIOS (pra registro)'; Cmd='(Get-CimInstance Win32_BIOS).SerialNumber'},
+                @{Name='IP LAN da maquina'; Desc='mostra IP local'; Cmd='(Get-NetIPAddress -AddressFamily IPv4 | Where { $_.PrefixOrigin -in "Dhcp","Manual" -and $_.IPAddress -notlike "169.*" -and $_.IPAddress -notlike "127.*" } | Select -First 1).IPAddress'},
+                @{Name='Listar usuarios locais'; Desc='nome, nome completo, ultimo login'; Cmd='Get-LocalUser | Where Enabled | Format-Table Name, FullName, LastLogon'},
+                @{Name='Listar compartilhamentos SMB'; Desc='shares ativos (sem os do sistema)'; Cmd='Get-SmbShare | Where { -not $_.Special }'}
+            )
 
-=== DISK TOOLKIT (esta ferramenta) ===
-irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/disk-toolkit.ps1 | iex
+            $script:ctx.helpList = New-Object System.Windows.Forms.ListView
+            $script:ctx.helpList.Location = New-Object System.Drawing.Point(10, 35)
+            $script:ctx.helpList.Size = New-Object System.Drawing.Size(460, 145)
+            $script:ctx.helpList.View = "Details"
+            $script:ctx.helpList.FullRowSelect = $true
+            $script:ctx.helpList.GridLines = $true
+            $script:ctx.helpList.MultiSelect = $false
+            $script:ctx.helpList.Columns.Add("Script", 200) | Out-Null
+            $script:ctx.helpList.Columns.Add("O que faz", 250) | Out-Null
+            for ($i = 0; $i -lt $script:helpCmds.Count; $i++) {
+                $c = $script:helpCmds[$i]
+                $item = New-Object System.Windows.Forms.ListViewItem($c.Name)
+                $item.SubItems.Add($c.Desc) | Out-Null
+                $item.Tag = $i  # guarda o indice pra recuperar o Cmd depois
+                $script:ctx.helpList.Items.Add($item) | Out-Null
+            }
+            $paramPanel.Controls.Add($script:ctx.helpList)
 
-=== PREPARAR HDD STORAGE (wipe + format NTFS) ===
-irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/prepare-storage.ps1 | iex
+            # Preview do comando selecionado
+            Add-Label 10 185 460 22 "Comando:" $true
+            $script:ctx.helpPreview = New-Object System.Windows.Forms.TextBox
+            $script:ctx.helpPreview.Location = New-Object System.Drawing.Point(10, 207)
+            $script:ctx.helpPreview.Size = New-Object System.Drawing.Size(460, 35)
+            $script:ctx.helpPreview.Multiline = $true
+            $script:ctx.helpPreview.ReadOnly = $true
+            $script:ctx.helpPreview.ScrollBars = "Vertical"
+            $script:ctx.helpPreview.Font = New-Object System.Drawing.Font("Consolas", 8)
+            $paramPanel.Controls.Add($script:ctx.helpPreview)
 
-=== LIMPEZA DO SISTEMA (cache, cookies, temp) ===
-irm https://raw.githubusercontent.com/GCintra00/limpeza/master/limpeza.ps1 | iex
+            $script:ctx.helpList.Add_SelectedIndexChanged({
+                if ($script:ctx.helpList.SelectedItems.Count -gt 0) {
+                    $idx = $script:ctx.helpList.SelectedItems[0].Tag
+                    $script:ctx.helpPreview.Text = $script:helpCmds[$idx].Cmd
+                }
+            })
 
-=== UTILITARIOS RAPIDOS ===
+            # Botoes contextuais
+            $btnRun = New-Object System.Windows.Forms.Button
+            $btnRun.Text = "Rodar (nova janela)"
+            $btnRun.Location = New-Object System.Drawing.Point(10, 248)
+            $btnRun.Size = New-Object System.Drawing.Size(150, 28)
+            $btnRun.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+            $btnRun.ForeColor = [System.Drawing.Color]::White
+            $btnRun.Add_Click({ Invoke-HelpCommand })
+            $paramPanel.Controls.Add($btnRun)
 
-# Corrigir DNS pra Google (pre-requisito qdo DNS do PC esta quebrado)
-Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }
-
-# Pegar serial do PC
-(Get-CimInstance Win32_BIOS).SerialNumber
-
-# Pegar IP LAN da maquina
-(Get-NetIPAddress -AddressFamily IPv4 | Where { $_.PrefixOrigin -in 'Dhcp','Manual' -and $_.IPAddress -notlike '169.*' -and $_.IPAddress -notlike '127.*' } | Select -First 1).IPAddress
-
-# Listar usuarios locais
-Get-LocalUser | Where Enabled | Format-Table Name, FullName, LastLogon
-
-# Listar compartilhamentos SMB ativos
-Get-SmbShare | Where { -not $_.Special }
-
-DICA: todos precisam PowerShell como Administrador.
-'@
-            $paramPanel.Controls.Add($tb)
+            $btnCopy = New-Object System.Windows.Forms.Button
+            $btnCopy.Text = "Copiar pro clipboard"
+            $btnCopy.Location = New-Object System.Drawing.Point(170, 248)
+            $btnCopy.Size = New-Object System.Drawing.Size(150, 28)
+            $btnCopy.Add_Click({
+                if ($script:ctx.helpList.SelectedItems.Count -eq 0) { Show-Msg "Selecione um script da lista." 'Aviso' 'Warning'; return }
+                $idx = $script:ctx.helpList.SelectedItems[0].Tag
+                Set-Clipboard -Value $script:helpCmds[$idx].Cmd
+                Set-Status "Comando copiado pro clipboard" ([System.Drawing.Color]::DarkGreen)
+            })
+            $paramPanel.Controls.Add($btnCopy)
         }
         'smart' {
             Add-Label 10 10 200 22 "Selecione o disco:" $true
@@ -553,12 +581,32 @@ DICA: todos precisam PowerShell como Administrador.
 
 # ============= Executores =============
 
+function Invoke-HelpCommand {
+    if ($script:ctx.helpList.SelectedItems.Count -eq 0) { Show-Msg "Selecione um script da lista." 'Aviso' 'Warning'; return }
+    $idx = $script:ctx.helpList.SelectedItems[0].Tag
+    $cmd = $script:helpCmds[$idx].Cmd
+    $name = $script:helpCmds[$idx].Name
+
+    if (-not (Confirm-Action "Rodar '$name' em uma nova janela do PowerShell?`n`nComando:`n$cmd")) { return }
+
+    # Encoda em base64 pra evitar problemas de escape ao passar via -EncodedCommand
+    $bytes = [System.Text.Encoding]::Unicode.GetBytes($cmd)
+    $encoded = [Convert]::ToBase64String($bytes)
+
+    try {
+        Start-Process powershell.exe -ArgumentList "-NoExit","-EncodedCommand",$encoded -ErrorAction Stop
+        Set-Status "'$name' iniciado em nova janela do PowerShell" ([System.Drawing.Color]::DarkGreen)
+    } catch {
+        Show-Msg "Falha ao iniciar nova janela: $($_.Exception.Message)" 'Erro' 'Error'
+    }
+}
+
 function Execute-Action($id) {
     Set-Status "Executando..." ([System.Drawing.Color]::DarkOrange)
 
     try {
         switch ($id) {
-            'helpcmds'   { Show-Msg "Este painel e so consulta. Selecione o texto e copie pro PowerShell." "Cheat sheet" "Information" }
+            'helpcmds'   { Invoke-HelpCommand }
             'smart'      { Exec-Smart }
             'info'       { Exec-Info }
             'wipe'       { Exec-Wipe }
