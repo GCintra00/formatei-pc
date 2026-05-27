@@ -981,7 +981,7 @@ function Exec-DeleteUser {
         $report = @()
         $report += "Profile (Win32_UserProfile): $(if ($profileDeleted) {'OK'} else {'FALHOU'})"
         $report += "Conta de usuario: $(if ($accountRemoved) {'OK'} else {'FALHOU'})"
-        $report += "Pasta C:\Users\$name: $(if ($folderRemoved) {'OK'} else {'FALHOU - $path'})"
+        $report += "Pasta $($path): $(if ($folderRemoved) {'OK'} else {"FALHOU"})"
         if ($lastError) { $report += "`nErro mais recente:`n$lastError" }
         $report += "`n`nDica: reinicie o PC e rode de novo, geralmente resolve o que sobrou."
         Show-Msg ("Remocao parcial:`n`n" + ($report -join "`n")) 'Aviso' 'Warning'
