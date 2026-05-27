@@ -92,7 +92,7 @@ function Get-VolumeDropdownItems {
 
 $script:actions = @(
     # === AJUDA ===
-    @{Id='helpcmds'; Name='Comandos GCintra00 (cheat sheet)'; Cat='AJUDA'; Desc='Lista de todos os scripts da conta GCintra00 que rodam via "irm | iex". Util pra lembrar rapido os outros comandos quando ta atendendo um PC. Selecione o texto e Ctrl+C pra copiar.'},
+    @{Id='helpcmds'; Name='Comandos (cheat sheet)'; Cat='AJUDA'; Desc='Lista de scripts disponiveis via "irm | iex" das contas GCintra00 (pessoal) e igcintra (empresa). Util pra lembrar rapido os outros comandos quando ta atendendo um PC. Clica "Rodar (nova janela)" pra executar ou "Copiar pro clipboard" pra colar no PowerShell.'},
 
     # === INFORMACAO ===
     @{Id='smart'; Name='S.M.A.R.T. (Saude do disco)'; Cat='INFORMACAO'; Desc='Le o status auto-reportado pelo proprio drive. Mostra saude geral (OK/Warning/Critical), horas de uso, temperatura, setores realocados e contagem de erros. Util pra detectar disco em pre-falha antes que dê problema serio.'},
@@ -258,11 +258,13 @@ function Build-Panel($actionId) {
 
     switch ($actionId) {
         'helpcmds' {
-            Add-Label 10 10 460 22 "Scripts GCintra00 (selecione + use os botoes abaixo):" $true
+            Add-Label 10 10 460 22 "Scripts disponiveis (selecione + use os botoes abaixo):" $true
 
             $script:helpCmds = @(
-                @{Name='Setup Completo de PC Novo'; Desc='8 etapas: bloatware + programas + config'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex'},
-                @{Name='Setup Light'; Desc='so Chrome + limpezas (mais rapido)'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex'},
+                @{Name='Setup PC Empresa (igcintra)'; Desc='setup corporativo IG Networks (13 etapas)'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/igcintra/pc-setup/master/setup.ps1 | iex'},
+                @{Name='Diagnostico de Audio (igcintra)'; Desc='coleta endpoints, drivers, mic/fone - copia pro clipboard'; Cmd='irm https://raw.githubusercontent.com/igcintra/pc-setup/master/diag-audio.ps1 | iex'},
+                @{Name='Setup PC Pessoal (GCintra00)'; Desc='8 etapas pessoais: bloatware + programas + config'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex'},
+                @{Name='Setup Light (GCintra00)'; Desc='so Chrome + limpezas (mais rapido)'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex'},
                 @{Name='Disk Toolkit'; Desc='esta ferramenta (re-executar)'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/disk-toolkit.ps1 | iex'},
                 @{Name='Preparar HDD Storage'; Desc='wipe + format NTFS focado'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/prepare-storage.ps1 | iex'},
                 @{Name='Limpeza do Sistema'; Desc='cache, cookies, temp'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/limpeza.ps1 | iex'},
