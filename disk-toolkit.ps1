@@ -114,7 +114,11 @@ $script:actions = @(
 
     # === USUARIOS ===
     @{Id='users'; Name='Listar e apagar perfis de usuario'; Cat='USUARIOS'; Desc='Lista todos os perfis locais do Windows com nome, tamanho ocupado em disco e ultimo login. Permite apagar perfis antigos (remove pasta C:\Users\xyz + conta + entrada no registro) pra liberar espaco. Bloqueia o perfil em uso (voce nao consegue apagar quem ta logado).'},
-    @{Id='createuser'; Name='Criar novo usuario local'; Cat='USUARIOS'; Desc='Cria uma conta LOCAL do Windows (sem vinculo com conta Microsoft) com nome de usuario e senha definidos por voce. Opcionalmente da privilegio de Administrador. Util pra criar conta tecnica em PCs em manutencao ou conta nova pra um colaborador.'}
+    @{Id='createuser'; Name='Criar novo usuario local'; Cat='USUARIOS'; Desc='Cria uma conta LOCAL do Windows (sem vinculo com conta Microsoft) com nome de usuario e senha definidos por voce. Opcionalmente da privilegio de Administrador. Util pra criar conta tecnica em PCs em manutencao ou conta nova pra um colaborador.'},
+
+    # === REDE ===
+    @{Id='share'; Name='Compartilhar pasta na rede (SMB)'; Cat='REDE'; Desc='Cria um compartilhamento SMB de uma pasta no PC, com usuario/senha de acesso. Configura permissoes NTFS, abre o firewall pra SMB e devolve o caminho UNC (\\IP\Nome) pra acessar de outras maquinas Windows. Util pra disponibilizar uma pasta de trabalho ou backup acessivel pela rede interna - estilo Move Docs.'},
+    @{Id='listshares'; Name='Listar compartilhamentos ativos'; Cat='REDE'; Desc='Mostra todos os compartilhamentos SMB ativos no PC: nome, caminho local, descricao e contagem de conexoes. Permite identificar e remover compartilhamentos antigos.'}
 )
 
 # ============= UI =============
@@ -366,6 +370,58 @@ function Build-Panel($actionId) {
             } catch {}
             Add-Label 10 200 460 50 "Requer ter o Disk2VHD.exe da Sysinternals.`nO script tenta baixar se nao existir."
         }
+        'share' {
+            Add-Label 10 10 200 22 "Pasta a compartilhar:" $true
+            $script:ctx.folderPath = Add-Textbox 10 35 380
+            $btnBrowse = New-Object System.Windows.Forms.Button
+            $btnBrowse.Location = New-Object System.Drawing.Point(395, 33)
+            $btnBrowse.Size = New-Object System.Drawing.Size(75, 26)
+            $btnBrowse.Text = "Procurar..."
+            $btnBrowse.Add_Click({
+                $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+                $dlg.Description = "Escolha a pasta para compartilhar na rede"
+                if ($dlg.ShowDialog() -eq 'OK') {
+                    $script:ctx.folderPath.Text = $dlg.SelectedPath
+                    if (-not $script:ctx.shareName.Text) {
+                        $script:ctx.shareName.Text = (Split-Path $dlg.SelectedPath -Leaf) -replace '\s+',''
+                    }
+                }
+            })
+            $paramPanel.Controls.Add($btnBrowse)
+
+            Add-Label 10 70 200 22 "Nome do compartilhamento:" $true
+            $script:ctx.shareName = Add-Textbox 10 95 230
+            Add-Label 245 70 220 22 "(sem caracteres especiais)" $false
+
+            Add-Label 10 130 200 22 "Usuario de acesso:" $true
+            $script:ctx.shareUser = Add-Textbox 10 155 200
+            Add-Label 220 130 200 22 "Senha:" $true
+            $script:ctx.sharePwd = Add-Textbox 220 155 200
+            $script:ctx.sharePwd.UseSystemPasswordChar = $true
+
+            $script:ctx.shareCreate = Add-Checkbox 10 185 460 "Criar usuario se nao existir (recomendado)" $true
+            $script:ctx.shareFull = Add-Checkbox 10 210 460 "Permitir escrita (desmarcado = somente leitura)" $true
+        }
+        'listshares' {
+            Add-Label 10 10 460 22 "Compartilhamentos ativos (selecione para remover):" $true
+            $script:ctx.sharesList = New-Object System.Windows.Forms.ListView
+            $script:ctx.sharesList.Location = New-Object System.Drawing.Point(10, 35)
+            $script:ctx.sharesList.Size = New-Object System.Drawing.Size(460, 200)
+            $script:ctx.sharesList.View = "Details"
+            $script:ctx.sharesList.FullRowSelect = $true
+            $script:ctx.sharesList.GridLines = $true
+            $script:ctx.sharesList.Columns.Add("Nome", 130) | Out-Null
+            $script:ctx.sharesList.Columns.Add("Caminho local", 230) | Out-Null
+            $script:ctx.sharesList.Columns.Add("Tipo", 80) | Out-Null
+            Get-SmbShare -ErrorAction SilentlyContinue | Where-Object { -not $_.Special } | ForEach-Object {
+                $item = New-Object System.Windows.Forms.ListViewItem($_.Name)
+                $item.SubItems.Add($_.Path) | Out-Null
+                $item.SubItems.Add($_.ShareType.ToString()) | Out-Null
+                $script:ctx.sharesList.Items.Add($item) | Out-Null
+            }
+            $paramPanel.Controls.Add($script:ctx.sharesList)
+            Add-Label 10 240 460 30 "Clique em Executar para remover o compartilhamento selecionado."
+        }
         'createuser' {
             Add-Label 10 10 200 22 "Nome do usuario:" $true
             $script:ctx.username = Add-Textbox 10 35 280
@@ -439,6 +495,8 @@ function Execute-Action($id) {
             'vhdx'       { Exec-Vhdx }
             'users'      { Exec-DeleteUser }
             'createuser' { Exec-CreateUser }
+            'share'      { Exec-Share }
+            'listshares' { Exec-RemoveShare }
         }
     } catch {
         Set-Status "Erro: $($_.Exception.Message)" ([System.Drawing.Color]::DarkRed)
@@ -733,6 +791,111 @@ function Exec-CreateUser {
     $roleText = if ($isAdmin) { "Administrador" } else { "Usuario padrao" }
     Show-Msg "Usuario '$username' criado com sucesso como $roleText.`n`nConta local, sem vinculo com Microsoft." "Sucesso"
     Set-Status "Usuario '$username' criado ($roleText)" ([System.Drawing.Color]::DarkGreen)
+}
+
+# --- REDE ---
+function Get-LanIPv4 {
+    $ip = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.PrefixOrigin -in 'Dhcp','Manual' -and $_.IPAddress -notmatch '^127\.' -and $_.IPAddress -notmatch '^169\.254\.' } |
+        Sort-Object InterfaceMetric |
+        Select-Object -First 1
+    if ($ip) { return $ip.IPAddress }
+    return $null
+}
+
+function Exec-Share {
+    $path = $script:ctx.folderPath.Text.Trim()
+    $shareName = $script:ctx.shareName.Text.Trim()
+    $user = $script:ctx.shareUser.Text.Trim()
+    $pwd = $script:ctx.sharePwd.Text
+    $createUser = $script:ctx.shareCreate.Checked
+    $fullAccess = $script:ctx.shareFull.Checked
+
+    if (-not (Test-Path $path -PathType Container)) { Show-Msg "Pasta nao existe: '$path'" 'Erro' 'Error'; return }
+    if (-not $shareName) { Show-Msg "Digite o nome do compartilhamento" 'Aviso' 'Warning'; return }
+    if ($shareName -match '[\\/:*?"<>|]') { Show-Msg "Nome do compartilhamento contem caracteres invalidos ( \\ / : * ? `" < > | )" 'Aviso' 'Warning'; return }
+    if (-not $user) { Show-Msg "Digite o nome do usuario de acesso" 'Aviso' 'Warning'; return }
+
+    # Share ja existe?
+    if (Get-SmbShare -Name $shareName -ErrorAction SilentlyContinue) {
+        if (-not (Confirm-Action "Ja existe um compartilhamento '$shareName'. Substituir?")) { return }
+        Remove-SmbShare -Name $shareName -Force -ErrorAction Stop
+    }
+
+    # Cria usuario se nao existir
+    $existingUser = Get-LocalUser -Name $user -ErrorAction SilentlyContinue
+    if (-not $existingUser) {
+        if (-not $createUser) { Show-Msg "Usuario '$user' nao existe e checkbox 'Criar usuario' nao esta marcada." 'Erro' 'Error'; return }
+        if (-not $pwd) { Show-Msg "Pra criar o usuario, digite uma senha." 'Aviso' 'Warning'; return }
+        $securePwd = ConvertTo-SecureString $pwd -AsPlainText -Force
+        New-LocalUser -Name $user -Password $securePwd -AccountNeverExpires -PasswordNeverExpires -ErrorAction Stop | Out-Null
+    }
+
+    # Cria o share
+    if ($fullAccess) {
+        New-SmbShare -Name $shareName -Path $path -FullAccess $user -ErrorAction Stop | Out-Null
+    } else {
+        New-SmbShare -Name $shareName -Path $path -ReadAccess $user -ErrorAction Stop | Out-Null
+    }
+
+    # Permissoes NTFS na pasta (sem isso, share permite mas filesystem bloqueia)
+    try {
+        $acl = Get-Acl $path
+        $rights = if ($fullAccess) { 'Modify' } else { 'ReadAndExecute' }
+        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $user, $rights, 'ContainerInherit,ObjectInherit', 'None', 'Allow'
+        )
+        $acl.SetAccessRule($rule)
+        Set-Acl -Path $path -AclObject $acl -ErrorAction Stop
+    } catch {
+        Write-Host "Aviso: permissao NTFS pode estar incompleta: $($_.Exception.Message)"
+    }
+
+    # Abre firewall pra SMB
+    foreach ($grp in @("File and Printer Sharing","Compartilhamento de Arquivo e Impressora","Compartilhamento de Arquivos e Impressoras")) {
+        Enable-NetFirewallRule -DisplayGroup $grp -ErrorAction SilentlyContinue
+    }
+
+    # Verifica perfil de rede
+    $profile = Get-NetConnectionProfile -ErrorAction SilentlyContinue | Select-Object -First 1
+    $profileWarn = ""
+    if ($profile -and $profile.NetworkCategory -eq 'Public') {
+        $profileWarn = "`n`nATENCAO: A rede ativa esta classificada como PUBLICA. Pode bloquear acesso de outras maquinas. Mude pra rede PRIVADA em Configuracoes > Rede > Propriedades."
+    }
+
+    $ip = Get-LanIPv4
+    if (-not $ip) { $ip = "<sem IP detectado>" }
+    $uncPath = "\\$ip\$shareName"
+
+    $msg = @"
+COMPARTILHAMENTO CRIADO COM SUCESSO
+
+UNC:        $uncPath
+IPv4 LAN:   $ip
+Pasta:      $path
+Usuario:    $user
+Senha:      $(if ($pwd) { $pwd } else { '(usuario ja existia - senha nao alterada)' })
+Permissao:  $(if ($fullAccess) { 'Leitura e ESCRITA' } else { 'Somente leitura' })
+
+ACESSO DE OUTRAS MAQUINAS WINDOWS:
+  Win+R -> $uncPath
+  Login -> $user
+  Senha -> $(if ($pwd) { $pwd } else { '(a senha do usuario)' })$profileWarn
+"@
+
+    Show-Msg $msg "Compartilhamento criado" "Information"
+    Set-Status "Share '$shareName' criado: $uncPath (user $user)" ([System.Drawing.Color]::DarkGreen)
+}
+
+function Exec-RemoveShare {
+    $sel = $script:ctx.sharesList.SelectedItems
+    if (-not $sel -or $sel.Count -eq 0) { Show-Msg "Selecione um compartilhamento da lista." 'Aviso' 'Warning'; return }
+    $name = $sel[0].Text
+    if (-not (Confirm-Action "Remover compartilhamento '$name'?`n`nIsso NAO apaga a pasta nem o usuario, so para de compartilhar pela rede.")) { return }
+    Remove-SmbShare -Name $name -Force -ErrorAction Stop
+    Show-Msg "Compartilhamento '$name' removido." "OK"
+    Set-Status "Share '$name' removido" ([System.Drawing.Color]::DarkGreen)
+    Build-Panel 'listshares'  # refresh
 }
 
 # ============= Eventos =============

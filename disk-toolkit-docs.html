@@ -138,6 +138,8 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li><a href="#vhdx">Imagem VHDX (snapshot do C:)</a></li>
 <li><a href="#users">Listar e apagar perfis</a></li>
 <li><a href="#createuser">Criar novo usuario local</a></li>
+<li><a href="#share">Compartilhar pasta na rede (SMB)</a></li>
+<li><a href="#listshares">Listar compartilhamentos ativos</a></li>
 </ul>
 </div>
 
@@ -363,6 +365,61 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li>Bloqueia se ja existir usuario com o mesmo nome</li>
 </ul>
 <div class="info">Conta criada eh sempre LOCAL - nao requer email Microsoft, nao sincroniza com nada online, nao precisa de internet pra usar.</div>
+</div>
+
+<!-- ============================= -->
+<h2>8.5. REDE <span class="tag tag-backup">compartilhamento SMB</span></h2>
+<!-- ============================= -->
+
+<div class="action-card" id="share">
+<div class="action-title">Compartilhar pasta na rede (SMB) <span class="tag tag-safe">criacao</span></div>
+<p class="action-desc">Cria um compartilhamento de pasta acessivel pela rede interna (igual aquele <code>\\IP\Move Docs</code> que voce ja usa). Configura permissoes NTFS, abre firewall e devolve o caminho UNC pra conectar.</p>
+<h4>Campos</h4>
+<ul class="action-fields">
+<li><strong>Pasta a compartilhar:</strong> qualquer pasta. Tem botao "Procurar..." que abre o seletor de pastas.</li>
+<li><strong>Nome do compartilhamento:</strong> o "X" no <code>\\IP\X</code>. Preenchido automaticamente com o nome da pasta quando voce escolhe.</li>
+<li><strong>Usuario / Senha:</strong> conta de acesso. Se nao existir e o checkbox "Criar usuario" estiver marcado, e criada como conta local.</li>
+<li><strong>Criar usuario:</strong> marca por padrao - se o user nao existe, cria.</li>
+<li><strong>Permitir escrita:</strong> marca por padrao. Desmarcado = somente leitura.</li>
+</ul>
+<h4>O que a acao faz</h4>
+<ol class="action-fields">
+<li>Valida que a pasta existe</li>
+<li>Cria usuario local se necessario (<code>New-LocalUser</code> com senha que nunca expira)</li>
+<li>Cria o compartilhamento SMB (<code>New-SmbShare</code> com <code>FullAccess</code> ou <code>ReadAccess</code>)</li>
+<li>Aplica permissao NTFS correspondente na pasta (sem isso, o SMB permite mas o filesystem bloqueia)</li>
+<li>Habilita regras de firewall do Windows: "File and Printer Sharing" (EN) ou "Compartilhamento de Arquivo e Impressora" (PT-BR)</li>
+<li>Detecta o IPv4 da rede local (ignora 127.x.x.x e 169.254.x.x)</li>
+<li>Mostra dialog com tudo: UNC, IP, usuario, senha, permissoes</li>
+</ol>
+<h4>Aviso de rede publica</h4>
+<p>Se o perfil de rede ativo estiver como <strong>Publica</strong>, o Windows bloqueia descoberta de SMB. O dialog avisa pra mudar pra Privada em Configuracoes &gt; Rede.</p>
+<h4>Resultado</h4>
+<div class="mockup">COMPARTILHAMENTO CRIADO COM SUCESSO
+
+UNC:        \\192.168.1.45\MinhaPasta
+IPv4 LAN:   192.168.1.45
+Pasta:      D:\Trabalho
+Usuario:    tecnico
+Senha:      xxxxxx
+Permissao:  Leitura e ESCRITA
+
+ACESSO DE OUTRAS MAQUINAS WINDOWS:
+  Win+R -> \\192.168.1.45\MinhaPasta
+  Login -> tecnico
+  Senha -> xxxxxx</div>
+</div>
+
+<div class="action-card" id="listshares">
+<div class="action-title">Listar compartilhamentos ativos <span class="tag tag-safe">leitura / remocao</span></div>
+<p class="action-desc">Mostra todos os compartilhamentos SMB ativos no PC (oculta os administrativos do Windows como C$, ADMIN$). Permite remover selecionando + Executar.</p>
+<h4>Colunas</h4>
+<ul class="action-fields">
+<li>Nome do share (como aparece em <code>\\IP\nome</code>)</li>
+<li>Caminho local que esta sendo compartilhado</li>
+<li>Tipo (FileSystemDirectory tipicamente)</li>
+</ul>
+<div class="info">Remover o share NAO apaga a pasta nem o usuario - so para de disponibilizar pela rede.</div>
 </div>
 
 <!-- ============================= -->
