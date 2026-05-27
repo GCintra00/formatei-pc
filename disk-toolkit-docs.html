@@ -137,6 +137,7 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li><a href="#clonedados">Clonar disco de dados</a></li>
 <li><a href="#vhdx">Imagem VHDX (snapshot do C:)</a></li>
 <li><a href="#users">Listar e apagar perfis</a></li>
+<li><a href="#createuser">Criar novo usuario local</a></li>
 </ul>
 </div>
 
@@ -335,6 +336,33 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li>Confirmacao Yes/No antes de executar</li>
 </ul>
 <div class="info">Util quando voce ajuda outro usuario e quer remover seu proprio perfil "tecnico" que criou pra fazer manutencao no PC dele, sem deixar lixo.</div>
+</div>
+
+<div class="action-card" id="createuser">
+<div class="action-title">Criar novo usuario local <span class="tag tag-safe">criacao</span></div>
+<p class="action-desc">Cria uma conta <strong>LOCAL</strong> do Windows (sem vinculo com conta Microsoft) com nome e senha definidos por voce. Opcionalmente da privilegio de Administrador.</p>
+<h4>Campos</h4>
+<ul class="action-fields">
+<li><strong>Nome do usuario:</strong> sem espacos nem caracteres especiais (validado)</li>
+<li><strong>Senha:</strong> minimo 4 caracteres (campo mascarado com asterisco)</li>
+<li><strong>Nome completo:</strong> opcional, eh o display name (ex: "Gabriel Cintra")</li>
+<li><strong>Tornar Administrador:</strong> marca por padrao - adiciona ao grupo Administradores</li>
+<li><strong>Senha nunca expira:</strong> marca por padrao - evita pedido de troca de senha</li>
+</ul>
+<h4>Casos de uso</h4>
+<ul class="action-fields">
+<li>Criar conta tecnica em PC de cliente (pra trabalhar sem invadir conta dele)</li>
+<li>Criar conta nova pra colaborador apos formatar PC</li>
+<li>Criar conta admin secundaria como backup caso a primaria seja perdida</li>
+</ul>
+<h4>Detalhes tecnicos</h4>
+<ul class="action-fields">
+<li>Usa <code>New-LocalUser</code> com <code>-AccountNeverExpires</code></li>
+<li>Senha convertida pra SecureString antes de criar</li>
+<li>Grupo Administradores detectado tanto em ingles (Administrators) quanto portugues (Administradores), com fallback via SID <code>S-1-5-32-544</code></li>
+<li>Bloqueia se ja existir usuario com o mesmo nome</li>
+</ul>
+<div class="info">Conta criada eh sempre LOCAL - nao requer email Microsoft, nao sincroniza com nada online, nao precisa de internet pra usar.</div>
 </div>
 
 <!-- ============================= -->

@@ -113,7 +113,8 @@ $script:actions = @(
     @{Id='vhdx'; Name='Imagem VHDX (snapshot do C:)'; Cat='BACKUP'; Desc='Cria um arquivo .vhdx no disco destino contendo um snapshot do C: tirado a quente via VSS (sem desligar). Util como backup antes de operacoes arriscadas, ou pra recuperar dados se o Windows corromper depois. Use Disk2VHD da Sysinternals.'},
 
     # === USUARIOS ===
-    @{Id='users'; Name='Listar e apagar perfis de usuario'; Cat='USUARIOS'; Desc='Lista todos os perfis locais do Windows com nome, tamanho ocupado em disco e ultimo login. Permite apagar perfis antigos (remove pasta C:\Users\xyz + conta + entrada no registro) pra liberar espaco. Bloqueia o perfil em uso (voce nao consegue apagar quem ta logado).'}
+    @{Id='users'; Name='Listar e apagar perfis de usuario'; Cat='USUARIOS'; Desc='Lista todos os perfis locais do Windows com nome, tamanho ocupado em disco e ultimo login. Permite apagar perfis antigos (remove pasta C:\Users\xyz + conta + entrada no registro) pra liberar espaco. Bloqueia o perfil em uso (voce nao consegue apagar quem ta logado).'},
+    @{Id='createuser'; Name='Criar novo usuario local'; Cat='USUARIOS'; Desc='Cria uma conta LOCAL do Windows (sem vinculo com conta Microsoft) com nome de usuario e senha definidos por voce. Opcionalmente da privilegio de Administrador. Util pra criar conta tecnica em PCs em manutencao ou conta nova pra um colaborador.'}
 )
 
 # ============= UI =============
@@ -365,6 +366,18 @@ function Build-Panel($actionId) {
             } catch {}
             Add-Label 10 200 460 50 "Requer ter o Disk2VHD.exe da Sysinternals.`nO script tenta baixar se nao existir."
         }
+        'createuser' {
+            Add-Label 10 10 200 22 "Nome do usuario:" $true
+            $script:ctx.username = Add-Textbox 10 35 280
+            Add-Label 10 70 200 22 "Senha:" $true
+            $script:ctx.password = Add-Textbox 10 95 280
+            $script:ctx.password.UseSystemPasswordChar = $true
+            Add-Label 10 130 200 22 "Nome completo (opcional):" $true
+            $script:ctx.fullname = Add-Textbox 10 155 280
+            $script:ctx.admin = Add-Checkbox 10 190 460 "Tornar Administrador (recomendado pra conta tecnica)" $true
+            $script:ctx.noexpire = Add-Checkbox 10 215 460 "Senha nunca expira" $true
+            Add-Label 10 245 460 30 "Conta sera criada como LOCAL (sem vinculo com conta Microsoft)."
+        }
         'users' {
             Add-Label 10 10 460 22 "Perfis locais do Windows:" $true
             $script:ctx.profiles = New-Object System.Windows.Forms.ListView
@@ -425,6 +438,7 @@ function Execute-Action($id) {
             'clonedados' { Exec-CloneData }
             'vhdx'       { Exec-Vhdx }
             'users'      { Exec-DeleteUser }
+            'createuser' { Exec-CreateUser }
         }
     } catch {
         Set-Status "Erro: $($_.Exception.Message)" ([System.Drawing.Color]::DarkRed)
@@ -667,6 +681,58 @@ function Exec-DeleteUser {
     Show-Msg "Perfil '$name' apagado." "Sucesso"
     Set-Status "Perfil $name removido" ([System.Drawing.Color]::DarkGreen)
     Build-Panel 'users'  # refresh lista
+}
+
+function Exec-CreateUser {
+    $username = $script:ctx.username.Text.Trim()
+    $password = $script:ctx.password.Text
+    $fullname = $script:ctx.fullname.Text.Trim()
+    $isAdmin = $script:ctx.admin.Checked
+    $noExpire = $script:ctx.noexpire.Checked
+
+    if (-not $username) { Show-Msg "Digite o nome do usuario." 'Aviso' 'Warning'; return }
+    if ($username -match '[\\/:*?"<>|\s]') { Show-Msg "Nome de usuario contem caracteres invalidos (espacos ou \ / : * ? `" < > |)." 'Aviso' 'Warning'; return }
+    if (-not $password) { Show-Msg "Digite uma senha." 'Aviso' 'Warning'; return }
+    if ($password.Length -lt 4) { Show-Msg "Senha muito curta (minimo 4 caracteres recomendado)." 'Aviso' 'Warning'; return }
+
+    if (Get-LocalUser -Name $username -ErrorAction SilentlyContinue) {
+        Show-Msg "Usuario '$username' ja existe." 'Aviso' 'Warning'; return
+    }
+
+    $confirm = "Criar usuario LOCAL '$username'?`n`n"
+    if ($fullname) { $confirm += "Nome completo: $fullname`n" }
+    $confirm += "Administrador: $(if ($isAdmin) {'SIM'} else {'Nao'})`n"
+    $confirm += "Senha nunca expira: $(if ($noExpire) {'SIM'} else {'Nao'})`n`nContinuar?"
+    if (-not (Confirm-Action $confirm)) { return }
+
+    $securePwd = ConvertTo-SecureString $password -AsPlainText -Force
+
+    $newUserArgs = @{
+        Name = $username
+        Password = $securePwd
+        AccountNeverExpires = $true
+    }
+    if ($fullname) { $newUserArgs.FullName = $fullname }
+    if ($noExpire) { $newUserArgs.PasswordNeverExpires = $true }
+
+    New-LocalUser @newUserArgs -ErrorAction Stop | Out-Null
+
+    if ($isAdmin) {
+        # Pega o grupo Administradores tanto em ingles quanto em portugues
+        $adminGroup = $null
+        foreach ($g in 'Administrators','Administradores') {
+            if (Get-LocalGroup -Name $g -ErrorAction SilentlyContinue) { $adminGroup = $g; break }
+        }
+        if (-not $adminGroup) {
+            # Fallback via SID (S-1-5-32-544 = Administrators sempre)
+            $adminGroup = (Get-LocalGroup | Where-Object { $_.SID.Value -eq 'S-1-5-32-544' }).Name
+        }
+        Add-LocalGroupMember -Group $adminGroup -Member $username -ErrorAction Stop
+    }
+
+    $roleText = if ($isAdmin) { "Administrador" } else { "Usuario padrao" }
+    Show-Msg "Usuario '$username' criado com sucesso como $roleText.`n`nConta local, sem vinculo com Microsoft." "Sucesso"
+    Set-Status "Usuario '$username' criado ($roleText)" ([System.Drawing.Color]::DarkGreen)
 }
 
 # ============= Eventos =============
