@@ -865,35 +865,48 @@ function Exec-DeleteUser {
     $userSid = $null
     try { $userSid = (Get-LocalUser -Name $name -ErrorAction SilentlyContinue).SID.Value } catch {}
 
-    # 0. Se logado, fazer logoff forçado + matar processos + esperar profile descarregar
+    # 0. Se logado, desconectar + fazer logoff forçado + matar processos
     if ($isLoggedIn) {
-        Set-Status "Deslogando e fechando processos de '$name'..." ([System.Drawing.Color]::DarkOrange)
+        Set-Status "Desconectando e deslogando '$name'..." ([System.Drawing.Color]::DarkOrange)
         try {
-            # Logoff de TODAS as sessoes do usuario (active e disconnected)
+            # Primeiro identifica todas as sessoes do usuario
+            $userSessions = @()
             $sessions = quser 2>$null
             foreach ($line in $sessions) {
                 if ($line -match "^\s*>?\s*(\S+)\s+(?:\S+\s+)?(\d+)\s+(\w+)") {
                     $sessUser = $matches[1].TrimStart('>').Trim()
                     $sessId = $matches[2]
                     if ($sessUser -ieq $name) {
-                        logoff $sessId 2>$null
+                        $userSessions += $sessId
                     }
                 }
             }
+
+            # ETAPA 1: tsdiscon = desconecta imediato (mesmo que o Task Manager > Disconnect faz).
+            # Mais agressivo que logoff: nao espera apps fecharem, so corta a sessao.
+            foreach ($sid in $userSessions) {
+                tsdiscon $sid 2>&1 | Out-Null
+            }
             Start-Sleep -Seconds 2
 
-            # Matar TODOS os processos restantes rodando como o usuario
+            # ETAPA 2: logoff = encerra a sessao definitivamente
+            foreach ($sid in $userSessions) {
+                logoff $sid 2>&1 | Out-Null
+            }
+            Start-Sleep -Seconds 2
+
+            # ETAPA 3: matar TODOS os processos restantes
             taskkill /F /FI "USERNAME eq $name" 2>&1 | Out-Null
             Start-Sleep -Seconds 1
 
-            # Tenta descarregar o hive de registro do usuario (libera o profile)
+            # ETAPA 4: descarregar hive de registro
             if ($userSid) {
                 reg unload "HKU\$userSid" 2>&1 | Out-Null
                 reg unload "HKU\$($userSid)_Classes" 2>&1 | Out-Null
             }
             Start-Sleep -Seconds 1
         } catch {
-            Show-Msg "Erro ao deslogar '$name': $($_.Exception.Message)" 'Erro' 'Error'
+            Show-Msg "Erro ao desconectar '$name': $($_.Exception.Message)" 'Erro' 'Error'
             return
         }
     }
