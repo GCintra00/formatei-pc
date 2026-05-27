@@ -898,40 +898,82 @@ function Exec-DeleteUser {
         }
     }
 
-    # 1. Remover via Win32_UserProfile (limpa registro tambem) - com retry porque
-    # o profile pode demorar a ser marcado como nao-loaded apos logoff
-    $removedProfile = $false
-    for ($attempt = 1; $attempt -le 5; $attempt++) {
+    # 1. Tenta API nativa DeleteProfile (userenv.dll) - eh o que Computer Management usa
+    # Mais robusto que Remove-CimInstance pra casos com profile loaded ou hive preso
+    $profileDeleted = $false
+    $lastError = $null
+
+    if ($userSid) {
         try {
-            $profile = Get-CimInstance Win32_UserProfile -ErrorAction SilentlyContinue | Where-Object { $_.LocalPath -eq $path }
-            if (-not $profile) { $removedProfile = $true; break }
-            $profile | Remove-CimInstance -ErrorAction Stop
-            $removedProfile = $true
-            break
+            $deleteProfileSig = '[DllImport("userenv.dll", CharSet=CharSet.Auto, SetLastError=true)] public static extern int DeleteProfile(string sidString, string profilePath, string computerName);'
+            $delHelper = Add-Type -MemberDefinition $deleteProfileSig -Name "ProfileUtil" -Namespace "Win32" -PassThru -ErrorAction Stop
+            $result = $delHelper::DeleteProfile($userSid, $null, $null)
+            if ($result -ne 0) {
+                $profileDeleted = $true
+            }
         } catch {
-            Set-Status "Tentativa $attempt/5 (profile ainda em uso)..." ([System.Drawing.Color]::DarkOrange)
-            # Mata processos de novo (alguns daemons podem reaparecer)
-            taskkill /F /FI "USERNAME eq $name" 2>&1 | Out-Null
-            if ($userSid) { reg unload "HKU\$userSid" 2>&1 | Out-Null }
-            Start-Sleep -Seconds 3
+            $lastError = $_.Exception.Message
         }
     }
-    if (-not $removedProfile) {
-        Show-Msg "Profile de '$name' nao pode ser removido apos 5 tentativas.`nPode ter algum processo do sistema segurando.`nReinicie o PC e tente de novo." 'Erro' 'Error'
-        return
+
+    # 2. Se DeleteProfile falhou, fallback pro Remove-CimInstance com retries
+    if (-not $profileDeleted) {
+        for ($attempt = 1; $attempt -le 5; $attempt++) {
+            try {
+                $profile = Get-CimInstance Win32_UserProfile -ErrorAction SilentlyContinue | Where-Object { $_.LocalPath -eq $path }
+                if (-not $profile) { $profileDeleted = $true; break }
+                $profile | Remove-CimInstance -ErrorAction Stop
+                $profileDeleted = $true
+                break
+            } catch {
+                $lastError = $_.Exception.Message
+                Set-Status "Tentativa $attempt/5 (profile preso)..." ([System.Drawing.Color]::DarkOrange)
+                taskkill /F /FI "USERNAME eq $name" 2>&1 | Out-Null
+                if ($userSid) { reg unload "HKU\$userSid" 2>&1 | Out-Null }
+                Start-Sleep -Seconds 3
+            }
+        }
     }
 
-    # 2. Remover a conta de usuario (se existir)
-    try { Remove-LocalUser -Name $name -ErrorAction Stop } catch {}
+    # 3. Remove a conta de usuario (mesmo se o profile nao saiu, conseguir tirar a conta ja resolve metade)
+    $accountRemoved = $false
+    try {
+        Remove-LocalUser -Name $name -ErrorAction Stop
+        $accountRemoved = $true
+    } catch {
+        if (-not $lastError) { $lastError = $_.Exception.Message }
+    }
 
-    # 3. Limpar pasta residual se nao foi removida
+    # 4. Forca remocao da pasta via rmdir (mais permissivo que Remove-Item)
+    $folderRemoved = $false
     if (Test-Path $path) {
+        # Primeiro tenta Remove-Item
         Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue
+        if (-not (Test-Path $path)) { $folderRemoved = $true }
+        else {
+            # Fallback: rmdir do cmd.exe que costuma ser mais permissivo
+            cmd /c "rmdir /s /q `"$path`"" 2>&1 | Out-Null
+            if (-not (Test-Path $path)) { $folderRemoved = $true }
+        }
+    } else {
+        $folderRemoved = $true
     }
 
+    # 5. Relatorio final
     $sufix = if ($isLoggedIn) { " (apos logoff forcado)" } else { "" }
-    Show-Msg "Perfil '$name' apagado$sufix." "Sucesso"
-    Set-Status "Perfil $name removido$sufix" ([System.Drawing.Color]::DarkGreen)
+    if ($profileDeleted -and $accountRemoved -and $folderRemoved) {
+        Show-Msg "Perfil '$name' apagado$sufix." "Sucesso"
+        Set-Status "Perfil $name removido$sufix" ([System.Drawing.Color]::DarkGreen)
+    } else {
+        $report = @()
+        $report += "Profile (Win32_UserProfile): $(if ($profileDeleted) {'OK'} else {'FALHOU'})"
+        $report += "Conta de usuario: $(if ($accountRemoved) {'OK'} else {'FALHOU'})"
+        $report += "Pasta C:\Users\$name: $(if ($folderRemoved) {'OK'} else {'FALHOU - $path'})"
+        if ($lastError) { $report += "`nErro mais recente:`n$lastError" }
+        $report += "`n`nDica: reinicie o PC e rode de novo, geralmente resolve o que sobrou."
+        Show-Msg ("Remocao parcial:`n`n" + ($report -join "`n")) 'Aviso' 'Warning'
+        Set-Status "$name removido parcialmente - ver dialog" ([System.Drawing.Color]::DarkOrange)
+    }
     Build-Panel 'users'  # refresh lista
 }
 
