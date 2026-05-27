@@ -258,13 +258,12 @@ function Build-Panel($actionId) {
 
     switch ($actionId) {
         'helpcmds' {
-            Add-Label 10 10 460 22 "Scripts disponiveis (selecione + use os botoes abaixo):" $true
+            Add-Label 10 10 460 22 "Scripts disponiveis (escolha aba, clica num script, use botoes):" $true
 
-            $script:helpCmds = @(
-                @{Name='Setup PC Empresa (igcintra)'; Desc='setup corporativo IG Networks (13 etapas)'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/igcintra/pc-setup/master/setup.ps1 | iex'},
-                @{Name='Diagnostico de Audio (igcintra)'; Desc='coleta endpoints, drivers, mic/fone - copia pro clipboard'; Cmd='irm https://raw.githubusercontent.com/igcintra/pc-setup/master/diag-audio.ps1 | iex'},
-                @{Name='Setup PC Pessoal (GCintra00)'; Desc='8 etapas pessoais: bloatware + programas + config'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex'},
-                @{Name='Setup Light (GCintra00)'; Desc='so Chrome + limpezas (mais rapido)'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex'},
+            # === Listas de comandos por conta ===
+            $script:helpCmdsGC = @(
+                @{Name='Setup PC Pessoal'; Desc='8 etapas: bloatware + programas + config'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex'},
+                @{Name='Setup Light'; Desc='so Chrome + limpezas (mais rapido)'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex'},
                 @{Name='Disk Toolkit'; Desc='esta ferramenta (re-executar)'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/disk-toolkit.ps1 | iex'},
                 @{Name='Preparar HDD Storage'; Desc='wipe + format NTFS focado'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/prepare-storage.ps1 | iex'},
                 @{Name='Limpeza do Sistema'; Desc='cache, cookies, temp'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/limpeza.ps1 | iex'},
@@ -274,26 +273,76 @@ function Build-Panel($actionId) {
                 @{Name='Listar usuarios locais'; Desc='nome, nome completo, ultimo login'; Cmd='Get-LocalUser | Where Enabled | Format-Table Name, FullName, LastLogon'},
                 @{Name='Listar compartilhamentos SMB'; Desc='shares ativos (sem os do sistema)'; Cmd='Get-SmbShare | Where { -not $_.Special }'}
             )
+            $script:helpCmdsIGN = @(
+                @{Name='Setup PC Empresa'; Desc='setup corporativo IG Networks (13 etapas)'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/igcintra/pc-setup/master/setup.ps1 | iex'},
+                @{Name='Diagnostico de Audio'; Desc='coleta endpoints/drivers/mic/fone - copia pro clipboard'; Cmd='irm https://raw.githubusercontent.com/igcintra/pc-setup/master/diag-audio.ps1 | iex'}
+            )
 
-            $script:ctx.helpList = New-Object System.Windows.Forms.ListView
-            $script:ctx.helpList.Location = New-Object System.Drawing.Point(10, 35)
-            $script:ctx.helpList.Size = New-Object System.Drawing.Size(460, 145)
-            $script:ctx.helpList.View = "Details"
-            $script:ctx.helpList.FullRowSelect = $true
-            $script:ctx.helpList.GridLines = $true
-            $script:ctx.helpList.MultiSelect = $false
-            $script:ctx.helpList.Columns.Add("Script", 200) | Out-Null
-            $script:ctx.helpList.Columns.Add("O que faz", 250) | Out-Null
-            for ($i = 0; $i -lt $script:helpCmds.Count; $i++) {
-                $c = $script:helpCmds[$i]
+            # === TabControl com 2 abas ===
+            $tabs = New-Object System.Windows.Forms.TabControl
+            $tabs.Location = New-Object System.Drawing.Point(10, 35)
+            $tabs.Size = New-Object System.Drawing.Size(460, 145)
+            $script:ctx.helpTabs = $tabs
+
+            # Aba 1: GCintra00 (pessoal)
+            $tabGC = New-Object System.Windows.Forms.TabPage
+            $tabGC.Text = "GCintra00 (pessoal)"
+            $listGC = New-Object System.Windows.Forms.ListView
+            $listGC.Dock = "Fill"
+            $listGC.View = "Details"
+            $listGC.FullRowSelect = $true
+            $listGC.GridLines = $true
+            $listGC.MultiSelect = $false
+            $listGC.Columns.Add("Script", 190) | Out-Null
+            $listGC.Columns.Add("O que faz", 245) | Out-Null
+            for ($i = 0; $i -lt $script:helpCmdsGC.Count; $i++) {
+                $c = $script:helpCmdsGC[$i]
                 $item = New-Object System.Windows.Forms.ListViewItem($c.Name)
                 $item.SubItems.Add($c.Desc) | Out-Null
-                $item.Tag = $i  # guarda o indice pra recuperar o Cmd depois
-                $script:ctx.helpList.Items.Add($item) | Out-Null
+                $item.Tag = $i
+                $listGC.Items.Add($item) | Out-Null
             }
-            $paramPanel.Controls.Add($script:ctx.helpList)
+            $listGC.Add_SelectedIndexChanged({
+                if ($listGC.SelectedItems.Count -gt 0) {
+                    $idx = $listGC.SelectedItems[0].Tag
+                    $script:ctx.helpPreview.Text = $script:helpCmdsGC[$idx].Cmd
+                }
+            }.GetNewClosure())
+            $tabGC.Controls.Add($listGC)
+            $tabs.TabPages.Add($tabGC)
+            $script:ctx.helpListGC = $listGC
 
-            # Preview do comando selecionado
+            # Aba 2: IGN (empresa)
+            $tabIGN = New-Object System.Windows.Forms.TabPage
+            $tabIGN.Text = "IGN (empresa)"
+            $listIGN = New-Object System.Windows.Forms.ListView
+            $listIGN.Dock = "Fill"
+            $listIGN.View = "Details"
+            $listIGN.FullRowSelect = $true
+            $listIGN.GridLines = $true
+            $listIGN.MultiSelect = $false
+            $listIGN.Columns.Add("Script", 190) | Out-Null
+            $listIGN.Columns.Add("O que faz", 245) | Out-Null
+            for ($i = 0; $i -lt $script:helpCmdsIGN.Count; $i++) {
+                $c = $script:helpCmdsIGN[$i]
+                $item = New-Object System.Windows.Forms.ListViewItem($c.Name)
+                $item.SubItems.Add($c.Desc) | Out-Null
+                $item.Tag = $i
+                $listIGN.Items.Add($item) | Out-Null
+            }
+            $listIGN.Add_SelectedIndexChanged({
+                if ($listIGN.SelectedItems.Count -gt 0) {
+                    $idx = $listIGN.SelectedItems[0].Tag
+                    $script:ctx.helpPreview.Text = $script:helpCmdsIGN[$idx].Cmd
+                }
+            }.GetNewClosure())
+            $tabIGN.Controls.Add($listIGN)
+            $tabs.TabPages.Add($tabIGN)
+            $script:ctx.helpListIGN = $listIGN
+
+            $paramPanel.Controls.Add($tabs)
+
+            # Preview do comando selecionado (compartilhado entre as 2 abas)
             Add-Label 10 185 460 22 "Comando:" $true
             $script:ctx.helpPreview = New-Object System.Windows.Forms.TextBox
             $script:ctx.helpPreview.Location = New-Object System.Drawing.Point(10, 207)
@@ -303,13 +352,6 @@ function Build-Panel($actionId) {
             $script:ctx.helpPreview.ScrollBars = "Vertical"
             $script:ctx.helpPreview.Font = New-Object System.Drawing.Font("Consolas", 8)
             $paramPanel.Controls.Add($script:ctx.helpPreview)
-
-            $script:ctx.helpList.Add_SelectedIndexChanged({
-                if ($script:ctx.helpList.SelectedItems.Count -gt 0) {
-                    $idx = $script:ctx.helpList.SelectedItems[0].Tag
-                    $script:ctx.helpPreview.Text = $script:helpCmds[$idx].Cmd
-                }
-            })
 
             # Botoes contextuais
             $btnRun = New-Object System.Windows.Forms.Button
@@ -326,9 +368,9 @@ function Build-Panel($actionId) {
             $btnCopy.Location = New-Object System.Drawing.Point(170, 248)
             $btnCopy.Size = New-Object System.Drawing.Size(150, 28)
             $btnCopy.Add_Click({
-                if ($script:ctx.helpList.SelectedItems.Count -eq 0) { Show-Msg "Selecione um script da lista." 'Aviso' 'Warning'; return }
-                $idx = $script:ctx.helpList.SelectedItems[0].Tag
-                Set-Clipboard -Value $script:helpCmds[$idx].Cmd
+                $cmd = Get-HelpCommand
+                if (-not $cmd) { Show-Msg "Selecione um script de uma das abas." 'Aviso' 'Warning'; return }
+                Set-Clipboard -Value $cmd
                 Set-Status "Comando copiado pro clipboard" ([System.Drawing.Color]::DarkGreen)
             })
             $paramPanel.Controls.Add($btnCopy)
@@ -583,11 +625,30 @@ function Build-Panel($actionId) {
 
 # ============= Executores =============
 
+function Get-HelpSelected {
+    # Retorna hashtable @{Name=...; Cmd=...} do item selecionado na aba ativa, ou $null
+    if (-not $script:ctx.helpTabs) { return $null }
+    $activeTab = $script:ctx.helpTabs.SelectedIndex
+    if ($activeTab -eq 0) {
+        $list = $script:ctx.helpListGC; $arr = $script:helpCmdsGC
+    } else {
+        $list = $script:ctx.helpListIGN; $arr = $script:helpCmdsIGN
+    }
+    if ($list.SelectedItems.Count -eq 0) { return $null }
+    $idx = $list.SelectedItems[0].Tag
+    return $arr[$idx]
+}
+
+function Get-HelpCommand {
+    $sel = Get-HelpSelected
+    if ($sel) { return $sel.Cmd } else { return $null }
+}
+
 function Invoke-HelpCommand {
-    if ($script:ctx.helpList.SelectedItems.Count -eq 0) { Show-Msg "Selecione um script da lista." 'Aviso' 'Warning'; return }
-    $idx = $script:ctx.helpList.SelectedItems[0].Tag
-    $cmd = $script:helpCmds[$idx].Cmd
-    $name = $script:helpCmds[$idx].Name
+    $sel = Get-HelpSelected
+    if (-not $sel) { Show-Msg "Selecione um script de uma das abas." 'Aviso' 'Warning'; return }
+    $cmd = $sel.Cmd
+    $name = $sel.Name
 
     if (-not (Confirm-Action "Rodar '$name' em uma nova janela do PowerShell?`n`nComando:`n$cmd")) { return }
 
