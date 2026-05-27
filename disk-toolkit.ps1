@@ -861,36 +861,64 @@ function Exec-DeleteUser {
 
     if (-not (Confirm-Action "Apagar perfil '$name' completamente?$extraMsg`n`nIsso remove:`n - Pasta $path`n - Conta de usuario local`n - Entradas no registro`n`nIrreversivel.")) { return }
 
-    # 0. Se logado, fazer logoff forçado primeiro
+    # Captura SID antes (pra usar em unload de registry depois se precisar)
+    $userSid = $null
+    try { $userSid = (Get-LocalUser -Name $name -ErrorAction SilentlyContinue).SID.Value } catch {}
+
+    # 0. Se logado, fazer logoff forçado + matar processos + esperar profile descarregar
     if ($isLoggedIn) {
-        Set-Status "Deslogando '$name'..." ([System.Drawing.Color]::DarkOrange)
+        Set-Status "Deslogando e fechando processos de '$name'..." ([System.Drawing.Color]::DarkOrange)
         try {
+            # Logoff de TODAS as sessoes do usuario (active e disconnected)
             $sessions = quser 2>$null
             foreach ($line in $sessions) {
-                # Formato tipico: " USERNAME       sessionname  id  STATE   IDLE TIME  LOGON TIME"
-                if ($line -match "^\s*>?\s*(\S+)\s+(\S+)?\s+(\d+)\s+") {
+                if ($line -match "^\s*>?\s*(\S+)\s+(?:\S+\s+)?(\d+)\s+(\w+)") {
                     $sessUser = $matches[1].TrimStart('>').Trim()
-                    $sessId = $matches[3]
+                    $sessId = $matches[2]
                     if ($sessUser -ieq $name) {
                         logoff $sessId 2>$null
-                        Start-Sleep -Seconds 2
-                        break
                     }
                 }
             }
+            Start-Sleep -Seconds 2
+
+            # Matar TODOS os processos restantes rodando como o usuario
+            taskkill /F /FI "USERNAME eq $name" 2>&1 | Out-Null
+            Start-Sleep -Seconds 1
+
+            # Tenta descarregar o hive de registro do usuario (libera o profile)
+            if ($userSid) {
+                reg unload "HKU\$userSid" 2>&1 | Out-Null
+                reg unload "HKU\$($userSid)_Classes" 2>&1 | Out-Null
+            }
+            Start-Sleep -Seconds 1
         } catch {
             Show-Msg "Erro ao deslogar '$name': $($_.Exception.Message)" 'Erro' 'Error'
             return
         }
     }
 
-    # 1. Remover via Win32_UserProfile (limpa registro tambem)
-    try {
-        Get-CimInstance Win32_UserProfile | Where-Object { $_.LocalPath -eq $path } | Remove-CimInstance -ErrorAction Stop
-    } catch {
-        # Pode falhar se ainda estiver "loaded" - aguardar um pouco e tentar de novo
-        Start-Sleep -Seconds 3
-        Get-CimInstance Win32_UserProfile | Where-Object { $_.LocalPath -eq $path } | Remove-CimInstance -ErrorAction Stop
+    # 1. Remover via Win32_UserProfile (limpa registro tambem) - com retry porque
+    # o profile pode demorar a ser marcado como nao-loaded apos logoff
+    $removedProfile = $false
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        try {
+            $profile = Get-CimInstance Win32_UserProfile -ErrorAction SilentlyContinue | Where-Object { $_.LocalPath -eq $path }
+            if (-not $profile) { $removedProfile = $true; break }
+            $profile | Remove-CimInstance -ErrorAction Stop
+            $removedProfile = $true
+            break
+        } catch {
+            Set-Status "Tentativa $attempt/5 (profile ainda em uso)..." ([System.Drawing.Color]::DarkOrange)
+            # Mata processos de novo (alguns daemons podem reaparecer)
+            taskkill /F /FI "USERNAME eq $name" 2>&1 | Out-Null
+            if ($userSid) { reg unload "HKU\$userSid" 2>&1 | Out-Null }
+            Start-Sleep -Seconds 3
+        }
+    }
+    if (-not $removedProfile) {
+        Show-Msg "Profile de '$name' nao pode ser removido apos 5 tentativas.`nPode ter algum processo do sistema segurando.`nReinicie o PC e tente de novo." 'Erro' 'Error'
+        return
     }
 
     # 2. Remover a conta de usuario (se existir)
