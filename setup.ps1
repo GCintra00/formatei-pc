@@ -13,8 +13,69 @@ if (-not $isAdmin) {
     exit
 }
 
+# Manter PC acordado durante toda a execucao do script
+try {
+    $sig = '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint esFlags);'
+    $sleepHelper = Add-Type -MemberDefinition $sig -Name "Sleep" -Namespace "Win32" -PassThru -ErrorAction SilentlyContinue
+    if ($sleepHelper) { $sleepHelper::SetThreadExecutionState(0x80000003) | Out-Null }
+} catch {}
+
 # Forcar TLS 1.2 (Windows 10 antigo usa TLS 1.0 e GitHub rejeita)
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+# ============================================
+# Log automatico em Downloads
+# ============================================
+$logTimestamp = Get-Date -Format "yyyy-MM-dd_HHmmss"
+$logPath = "$env:USERPROFILE\Downloads\formatei-pc-log_$logTimestamp.txt"
+try {
+    Start-Transcript -Path $logPath -Force -ErrorAction Stop | Out-Null
+    $logAtivo = $true
+} catch { $logAtivo = $false }
+
+Write-Host "========================================" -ForegroundColor DarkGray
+Write-Host "  FORMATEI PC - LOG INICIADO" -ForegroundColor DarkGray
+Write-Host "  $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')" -ForegroundColor DarkGray
+if ($logAtivo) { Write-Host "  Log: $logPath" -ForegroundColor DarkGray }
+Write-Host "  PC: $env:COMPUTERNAME | User: $env:USERNAME" -ForegroundColor DarkGray
+try {
+    $os = Get-CimInstance Win32_OperatingSystem
+    Write-Host "  OS: $($os.Caption) (build $($os.BuildNumber))" -ForegroundColor DarkGray
+} catch {}
+try {
+    $cs = Get-CimInstance Win32_ComputerSystem
+    Write-Host "  HW: $($cs.Manufacturer) $($cs.Model)" -ForegroundColor DarkGray
+} catch {}
+Write-Host "========================================" -ForegroundColor DarkGray
+Write-Host ""
+
+# Helper de download com timeout REAL (BITS, fallback curl.exe)
+function Download-File {
+    param([string]$Url, [string]$OutPath, [int]$TimeoutSec = 180)
+    try {
+        $job = Start-BitsTransfer -Source $Url -Destination $OutPath -Asynchronous -ErrorAction Stop
+        $start = Get-Date
+        while ($job.JobState -in 'Connecting','Transferring','Queued') {
+            if (((Get-Date) - $start).TotalSeconds -gt $TimeoutSec) {
+                Remove-BitsTransfer -BitsJob $job -ErrorAction SilentlyContinue
+                return $false
+            }
+            Start-Sleep -Seconds 2
+        }
+        if ($job.JobState -eq 'Transferred') {
+            Complete-BitsTransfer -BitsJob $job
+            return (Test-Path $OutPath) -and ((Get-Item $OutPath).Length -gt 0)
+        } else {
+            Remove-BitsTransfer -BitsJob $job -ErrorAction SilentlyContinue
+        }
+    } catch {}
+    $curlExe = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($curlExe) {
+        $p = Start-Process curl.exe -ArgumentList @("-L","-s","--max-time","$TimeoutSec","-o","`"$OutPath`"","`"$Url`"") -PassThru -Wait -NoNewWindow
+        if ($p.ExitCode -eq 0 -and (Test-Path $OutPath) -and ((Get-Item $OutPath).Length -gt 0)) { return $true }
+    }
+    return $false
+}
 
 # Corrigir DNS
 Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
@@ -26,7 +87,7 @@ Write-Host "DNS configurado (Google 8.8.8.8)" -ForegroundColor Gray
 Invoke-RestMethod -Uri "https://script.google.com/macros/s/AKfycbwZwJrHL2SnECPzx5inz2K5_AVxbVvukXMra0grAgSbVuNjbxeNnP8sLDGdy-Sf2yfvoA/exec?script=formatei-pc" -ErrorAction SilentlyContinue | Out-Null
 
 $desktop = [Environment]::GetFolderPath("Desktop")
-$etapaTotal = 8
+$etapaTotal = 9
 $erros = @()
 $instalados = @()
 $ghRelease = "https://github.com/GCintra00/formatei-pc/releases/download/v1.0"
@@ -40,54 +101,59 @@ Write-Host "=========================================" -ForegroundColor Cyan
 # [0] VERIFICAR/INSTALAR WINGET
 # ============================================
 
-$wingetOk = Get-Command winget -ErrorAction SilentlyContinue
-if (-not $wingetOk) {
-    Write-Host "`nWinget nao encontrado. Instalando..." -ForegroundColor Yellow
+function Test-WingetWorking {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { return $false }
     try {
-        $tempDir = "$env:TEMP\winget-install"
-        New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+        $null = winget --version 2>&1
+        if ($LASTEXITCODE -ne 0) { return $false }
+        $sourceTest = winget source list 2>&1
+        if ($LASTEXITCODE -ne 0) { return $false }
+        return $true
+    } catch { return $false }
+}
 
-        # Baixar dependencias necessarias
-        Write-Host "  Baixando dependencias..." -ForegroundColor Gray
-        $vcLibsUrl = "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx"
-        $uiXamlUrl = "https://github.com/nicedavid98/winget_dependencies/raw/main/Microsoft.UI.Xaml.2.8.x64.appx"
-        Invoke-WebRequest -Uri $vcLibsUrl -OutFile "$tempDir\vclibs.appx" -UseBasicParsing -ErrorAction Stop
+function Install-WingetBootstrap {
+    Write-Host "  Bootstrap do winget (App Installer)..." -ForegroundColor Yellow
+    $tempDir = "$env:TEMP\winget-bootstrap"
+    if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir -Force | Out-Null }
+    try {
+        Invoke-WebRequest -Uri "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx" -OutFile "$tempDir\vclibs.appx" -UseBasicParsing -ErrorAction Stop
+        Invoke-WebRequest -Uri "https://github.com/microsoft/microsoft-ui-xaml/releases/download/v2.8.6/Microsoft.UI.Xaml.2.8.x64.appx" -OutFile "$tempDir\uixaml.appx" -UseBasicParsing -ErrorAction Stop
+        Invoke-WebRequest -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" -OutFile "$tempDir\winget.msixbundle" -UseBasicParsing -ErrorAction Stop
         Add-AppxPackage -Path "$tempDir\vclibs.appx" -ErrorAction SilentlyContinue
-        Invoke-WebRequest -Uri $uiXamlUrl -OutFile "$tempDir\uixaml.appx" -UseBasicParsing -ErrorAction Stop
         Add-AppxPackage -Path "$tempDir\uixaml.appx" -ErrorAction SilentlyContinue
-
-        # Baixar e instalar winget
-        Write-Host "  Baixando winget..." -ForegroundColor Gray
-        $wingetUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
-        Invoke-WebRequest -Uri $wingetUrl -OutFile "$tempDir\winget.msixbundle" -UseBasicParsing -ErrorAction Stop
         Add-AppxPackage -Path "$tempDir\winget.msixbundle" -ErrorAction Stop
-
-        Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-
-        # Atualizar PATH para encontrar winget
-        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
-        # Adicionar caminho comum do winget
-        $wingetPath = "$env:LOCALAPPDATA\Microsoft\WindowsApps"
-        if ($env:PATH -notlike "*$wingetPath*") { $env:PATH += ";$wingetPath" }
-
-        $wingetOk = Get-Command winget -ErrorAction SilentlyContinue
-        if ($wingetOk) {
-            Write-Host "  Winget instalado!" -ForegroundColor Green
-        } else {
-            Write-Host "  Winget instalado mas precisa reiniciar o PowerShell" -ForegroundColor Yellow
-            Write-Host "  Rode o script novamente apos fechar e reabrir o PowerShell" -ForegroundColor Yellow
-        }
+        Write-Host "  Bootstrap concluido" -ForegroundColor Green
+        return $true
     } catch {
-        Write-Host "  ERRO ao instalar winget: $_" -ForegroundColor Red
-        Write-Host "  Tente instalar 'App Installer' pela Microsoft Store" -ForegroundColor Yellow
-        Write-Host "  Ou abra a Microsoft Store e busque 'App Installer'" -ForegroundColor Yellow
+        Write-Host "  Bootstrap falhou: $($_.Exception.Message)" -ForegroundColor Red
+        return $false
     }
 }
-# Flag global: winget disponivel?
-$hasWinget = [bool](Get-Command winget -ErrorAction SilentlyContinue)
+
+if (-not (Test-WingetWorking)) {
+    Write-Host "`nWinget nao detectado ou nao funcional. Tentando bootstrap..." -ForegroundColor Yellow
+    if (Install-WingetBootstrap) {
+        $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+        Start-Sleep -Seconds 3
+        if (Test-WingetWorking) { winget source update 2>&1 | Out-Null }
+    }
+}
+
+$hasWinget = Test-WingetWorking
 if (-not $hasWinget) {
-    Write-Host "  AVISO: Winget nao disponivel. Programas via Winget serao pulados." -ForegroundColor Yellow
-    Write-Host "  Instale 'App Installer' pela Microsoft Store e rode novamente." -ForegroundColor Yellow
+    Write-Host "  AVISO: Winget continua indisponivel. Programas serao pulados ou usarao fallback direto." -ForegroundColor Yellow
+}
+
+# Desabilita fonte msstore (causa erro 0x8a15005e em PCs com cert vencido)
+if ($hasWinget) {
+    try {
+        $msstoreCheck = winget source list 2>&1 | Out-String
+        if ($msstoreCheck -match "msstore") {
+            winget source remove msstore 2>&1 | Out-Null
+            Write-Host "  Fonte msstore desabilitada (workaround pra cert vencido)" -ForegroundColor DarkGray
+        }
+    } catch {}
 }
 
 # ============================================
@@ -204,6 +270,52 @@ foreach ($mid in $mcafeeIds) {
     }
 }
 } # fim if hasWinget McAfee
+
+# === Deep clean McAfee residual (WPS + WebAdvisor + tarefas + pastas) ===
+Write-Host "  McAfee: limpeza profunda silenciosa..." -ForegroundColor Yellow
+
+$tasksRemoved = 0
+Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like "*McAfee*" -or $_.TaskPath -like "*McAfee*" } | ForEach-Object {
+    try {
+        Unregister-ScheduledTask -TaskName $_.TaskName -TaskPath $_.TaskPath -Confirm:$false -ErrorAction Stop
+        $tasksRemoved++
+    } catch {}
+}
+if ($tasksRemoved -gt 0) { Write-Host "    $tasksRemoved tarefa(s) agendada(s) apagada(s)" -ForegroundColor DarkGray }
+
+$uninstKeys = @(
+    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+    "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+)
+$found = Get-ItemProperty $uninstKeys -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like "*McAfee*" }
+foreach ($app in $found) {
+    $unins = $app.QuietUninstallString
+    if (-not $unins) { $unins = $app.UninstallString }
+    if ($unins) {
+        try {
+            if ($unins -match '^"([^"]+)"\s*(.*)$') { $exe = $matches[1]; $argStr = $matches[2] }
+            else { $tk = $unins -split ' ',2; $exe = $tk[0]; $argStr = if ($tk.Count -gt 1) { $tk[1] } else { '' } }
+            if ($argStr -notmatch '/quiet|/qn|/silent|/S\b') { $argStr = "$argStr /quiet /norestart" }
+            if (Test-Path $exe) {
+                $p = Start-Process -FilePath $exe -ArgumentList $argStr -WindowStyle Hidden -PassThru -ErrorAction SilentlyContinue
+                if ($p) {
+                    if (-not $p.WaitForExit(180000)) { try { $p.Kill() } catch {} }
+                    Write-Host "    desinstalado: $($app.DisplayName)" -ForegroundColor DarkGray
+                }
+            }
+        } catch {}
+    }
+}
+
+$mcafeePaths = @("$env:ProgramFiles\McAfee","${env:ProgramFiles(x86)}\McAfee","$env:ProgramData\McAfee","$env:LOCALAPPDATA\McAfee","$env:APPDATA\McAfee")
+foreach ($p in $mcafeePaths) {
+    if (Test-Path $p) { Remove-Item $p -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+if (Get-Service -Name "McAfee WebAdvisor" -ErrorAction SilentlyContinue) {
+    Start-Process sc.exe -ArgumentList "delete `"McAfee WebAdvisor`"" -WindowStyle Hidden -Wait -ErrorAction SilentlyContinue | Out-Null
+}
+
 Write-Host "  McAfee: concluido" -ForegroundColor Green
 
 # Matar TUDO via taskkill (nao trava em processos protegidos)
@@ -293,17 +405,54 @@ foreach ($prog in $programas) {
     }
 
     $resultado = winget install --id $prog.id -e --accept-source-agreements --accept-package-agreements --silent 2>&1
+    $code = $LASTEXITCODE
 
-    if ($LASTEXITCODE -eq 0) {
+    if ($code -eq 0) {
         Write-Host " OK" -ForegroundColor Green
         $instalados += "$($prog.nome) - Instalado"
-    } elseif ($resultado -match "already installed") {
+    } elseif ($resultado -match "already installed|ja esta instalado") {
         Write-Host " Ja instalado" -ForegroundColor Gray
         $instalados += "$($prog.nome) - Ja instalado"
     } else {
-        Write-Host " ERRO" -ForegroundColor Red
-        $instalados += "$($prog.nome) - ERRO"
-        $erros += $prog.nome
+        # Retry com --source winget explicito
+        $resultado2 = winget install --id $prog.id -e --source winget --accept-source-agreements --accept-package-agreements --silent 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host " OK (retry com source winget)" -ForegroundColor Green
+            $instalados += "$($prog.nome) - Instalado (retry)"
+        } else {
+            # Fallback especifico: Chrome -> MSI direto do Google
+            $fallbackInstalled = $false
+            if ($prog.id -eq 'Google.Chrome') {
+                Write-Host ""
+                Write-Host "    [fallback] Baixando Chrome MSI direto do Google (timeout 4 min)..." -ForegroundColor DarkYellow
+                $chromeMsi = "$env:TEMP\chrome_installer.msi"
+                if (Test-Path $chromeMsi) { Remove-Item $chromeMsi -Force -ErrorAction SilentlyContinue }
+                if (Download-File "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi" $chromeMsi 240) {
+                    $sizeMB = [math]::Round((Get-Item $chromeMsi).Length / 1MB, 1)
+                    Write-Host "    [fallback] Download OK ($sizeMB MB). Instalando MSI (timeout 3 min)..." -ForegroundColor DarkYellow
+                    $p = Start-Process "msiexec.exe" -ArgumentList "/i `"$chromeMsi`" /qn /norestart" -PassThru
+                    if (-not $p.WaitForExit(180000)) {
+                        $p.Kill()
+                        Write-Host "    [fallback] TIMEOUT (>3 min)" -ForegroundColor Red
+                    } elseif ($p.ExitCode -eq 0) {
+                        $fallbackInstalled = $true
+                    }
+                    Remove-Item $chromeMsi -ErrorAction SilentlyContinue
+                }
+            }
+
+            if ($fallbackInstalled) {
+                Write-Host "    [fallback] => OK" -ForegroundColor Green
+                $instalados += "$($prog.nome) - Instalado (fallback)"
+            } else {
+                $errMsg = ($resultado -join " ") -replace "\s+", " "
+                if ($errMsg.Length -gt 200) { $errMsg = $errMsg.Substring(0, 200) + "..." }
+                Write-Host " ERRO (exit $code)" -ForegroundColor Red
+                Write-Host "    $errMsg" -ForegroundColor DarkRed
+                $instalados += "$($prog.nome) - ERRO: $errMsg"
+                $erros += $prog.nome
+            }
+        }
     }
 }
 
@@ -633,7 +782,47 @@ try {
 # [8] REMOVER AUTO-INICIO DE PROGRAMAS
 # ============================================
 
-Write-Host "`n[8/$etapaTotal] Removendo programas do inicio automatico..." -ForegroundColor Cyan
+Write-Host "`n[8/$etapaTotal] Configurando energia..." -ForegroundColor Cyan
+
+# AC (carregador): nada apaga / nao dorme
+powercfg /change monitor-timeout-ac 0 2>&1 | Out-Null
+powercfg /change standby-timeout-ac 0 2>&1 | Out-Null
+powercfg /change hibernate-timeout-ac 0 2>&1 | Out-Null
+Write-Host "  AC (carregador): nunca apaga tela, nunca dorme" -ForegroundColor Green
+
+# Bateria: tela apaga em 30 min, NAO dorme
+powercfg /change monitor-timeout-dc 30 2>&1 | Out-Null
+powercfg /change standby-timeout-dc 0 2>&1 | Out-Null
+powercfg /change hibernate-timeout-dc 0 2>&1 | Out-Null
+Write-Host "  Bateria: tela apaga em 30 min, sem sleep" -ForegroundColor Green
+
+# Botoes: Power button -> shutdown | Lid close -> sleep
+powercfg /setacvalueindex SCHEME_CURRENT 4f971e89-eebd-4455-a8de-9e59040e7347 7648efa3-dd9c-4e3e-b566-50f929386280 3 2>&1 | Out-Null
+powercfg /setdcvalueindex SCHEME_CURRENT 4f971e89-eebd-4455-a8de-9e59040e7347 7648efa3-dd9c-4e3e-b566-50f929386280 3 2>&1 | Out-Null
+powercfg /setacvalueindex SCHEME_CURRENT 4f971e89-eebd-4455-a8de-9e59040e7347 5ca83367-6e45-459f-a27b-476b1d01c936 1 2>&1 | Out-Null
+powercfg /setdcvalueindex SCHEME_CURRENT 4f971e89-eebd-4455-a8de-9e59040e7347 5ca83367-6e45-459f-a27b-476b1d01c936 1 2>&1 | Out-Null
+Write-Host "  Botao Power = desligar | Fechar tampa = sleep (volta ao abrir)" -ForegroundColor Green
+
+# Hibernacao off + Modern Standby off + wake devices off (shutdown real, LED apaga)
+powercfg /hibernate off 2>&1 | Out-Null
+REG ADD "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Power" /V HiberbootEnabled /T REG_DWORD /D 0 /F 2>&1 | Out-Null
+REG ADD "HKLM\SYSTEM\CurrentControlSet\Control\Power" /V PlatformAoAcOverride /T REG_DWORD /D 0 /F 2>&1 | Out-Null
+Write-Host "  Hibernacao + Fast Startup + Modern Standby desabilitados" -ForegroundColor Green
+
+try {
+    $wakeDevices = powercfg /devicequery wake_armed 2>&1 | Where-Object { $_ -and $_ -notmatch 'NONE|------' }
+    $disabled = 0
+    foreach ($dev in $wakeDevices) {
+        $d = "$dev".Trim()
+        if ($d) { powercfg /devicedisablewake "$d" 2>&1 | Out-Null; $disabled++ }
+    }
+    if ($disabled -gt 0) { Write-Host "  $disabled dispositivo(s) impedido(s) de acordar o PC" -ForegroundColor Green }
+} catch {}
+
+powercfg /setactive SCHEME_CURRENT 2>&1 | Out-Null
+
+
+Write-Host "`n[9/$etapaTotal] Removendo programas do inicio automatico..." -ForegroundColor Cyan
 
 # Itens que DEVEM permanecer no auto-inicio
 $manter = @("SecurityHealth", "RtkAudUService", "Lightshot")
@@ -845,5 +1034,16 @@ if ($erros.Count -gt 0) {
         Write-Host "  ! $e" -ForegroundColor Red
     }
 }
+
+if ($logAtivo) {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor DarkGray
+    Write-Host "  LOG SALVO EM:" -ForegroundColor Green
+    Write-Host "  $logPath" -ForegroundColor Green
+    Write-Host "  (Se algo der errado, mande esse arquivo para diagnostico)" -ForegroundColor DarkGray
+    Write-Host "========================================" -ForegroundColor DarkGray
+    try { Stop-Transcript | Out-Null } catch {}
+}
+
 Write-Host ""
 pause
