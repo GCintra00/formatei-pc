@@ -762,13 +762,20 @@ function Install-SmartCtl {
     if (-not (Confirm-Action "smartctl nao encontrado.`n`nBaixar o smartmontools (~3 MB) para leitura completa de SMART (inclui NVMe e SSD)?`n`nSem ele, uso o WMI do Windows (dados limitados).")) { return $null }
     $ver  = $script:SMARTCTL_VERSION
     $file = "smartmontools-$ver-1.win32-setup.exe"
-    $url  = "https://sourceforge.net/projects/smartmontools/files/smartmontools/$ver/$file/download"
+    # Mirror DIRETO: a URL /files/.../download do SF devolve HTML (salvo como .exe ->
+    # "arquivo corrompido"). O master.dl?viasf=1 entrega o binario de verdade.
+    $url  = "https://master.dl.sourceforge.net/project/smartmontools/smartmontools/$ver/$file`?viasf=1"
     $dest = Join-Path $env:LOCALAPPDATA 'disk-toolkit\smartctl'
     $tmp  = Join-Path $env:TEMP $file
     try {
         Set-Status "Baixando smartctl..." ([System.Drawing.Color]::DarkOrange)
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -ErrorAction Stop
+        # valida: tem que ser um PE (header 'MZ' = 77,90) e nao um HTML de redirect
+        $sig = [System.IO.File]::ReadAllBytes($tmp) | Select-Object -First 2
+        if ((Get-Item $tmp).Length -lt 200000 -or $sig[0] -ne 77 -or $sig[1] -ne 90) {
+            throw "o download nao e um executavel valido (mirror devolveu pagina?). Tente de novo ou baixe manualmente."
+        }
         Set-Status "Instalando smartctl..." ([System.Drawing.Color]::DarkOrange)
         Start-Process -FilePath $tmp -ArgumentList "/S","/D=$dest" -Wait -ErrorAction Stop
         $exe = Join-Path $dest 'bin\smartctl.exe'
