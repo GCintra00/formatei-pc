@@ -749,89 +749,183 @@ function Execute-Action($id) {
 }
 
 # --- INFO ---
-function Exec-Smart {
-    $diskNum = $script:ctx.disk.SelectedItem.Number
-    $disk    = Get-PhysicalDisk | Where-Object { $_.DeviceId -eq $diskNum }
-    $reliab  = Get-StorageReliabilityCounter -PhysicalDisk $disk -ErrorAction SilentlyContinue
-    $raw     = Get-RawSmart $diskNum
+# smartctl (smartmontools): fonte completa de SMART p/ SATA, NVMe e USB.
+# O WMI nativo do Windows e incompleto (NVMe quase vazio), entao preferimos
+# o smartctl quando disponivel e caimos pro WMI como fallback.
+$script:SMARTCTL_VERSION = '7.4'
+$script:smartctlChecked  = $false
+$script:smartctlPath     = $null
 
-    # Helper: pega o 1o valor nao nulo/nao vazio (e descarta zeros quando pedido)
-    $pick = {
-        param([bool]$dropZero, $vals)
-        foreach ($v in $vals) {
-            if ($null -eq $v) { continue }
-            if ("$v".Trim() -eq '') { continue }
-            if ($dropZero -and ($v -eq 0)) { continue }
-            return $v
-        }
-        return $null
+function Install-SmartCtl {
+    # Baixa o instalador NSIS do smartmontools e instala silencioso em LOCALAPPDATA.
+    # /S = silencioso, /D = destino (precisa ser o ULTIMO arg e sem aspas - regra do NSIS).
+    if (-not (Confirm-Action "smartctl nao encontrado.`n`nBaixar o smartmontools (~3 MB) para leitura completa de SMART (inclui NVMe e SSD)?`n`nSem ele, uso o WMI do Windows (dados limitados).")) { return $null }
+    $ver  = $script:SMARTCTL_VERSION
+    $file = "smartmontools-$ver-1.win32-setup.exe"
+    $url  = "https://sourceforge.net/projects/smartmontools/files/smartmontools/$ver/$file/download"
+    $dest = Join-Path $env:LOCALAPPDATA 'disk-toolkit\smartctl'
+    $tmp  = Join-Path $env:TEMP $file
+    try {
+        Set-Status "Baixando smartctl..." ([System.Drawing.Color]::DarkOrange)
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -ErrorAction Stop
+        Set-Status "Instalando smartctl..." ([System.Drawing.Color]::DarkOrange)
+        Start-Process -FilePath $tmp -ArgumentList "/S","/D=$dest" -Wait -ErrorAction Stop
+        $exe = Join-Path $dest 'bin\smartctl.exe'
+        if (Test-Path $exe) { return $exe }
+    } catch {
+        Show-Msg "Nao consegui baixar/instalar o smartctl:`n$($_.Exception.Message)`n`nBaixe manualmente de smartmontools.org e coloque smartctl.exe na pasta do script. Continuo com o WMI." 'smartctl' 'Warning'
     }
+    return $null
+}
+
+function Get-SmartCtl {
+    if ($script:smartctlChecked) { return $script:smartctlPath }
+    $script:smartctlChecked = $true
+    $found = $null
+    $cmd = Get-Command smartctl.exe -ErrorAction SilentlyContinue
+    if ($cmd) { $found = $cmd.Source }
+    if (-not $found) {
+        $cands = @()
+        if ($PSScriptRoot) { $cands += (Join-Path $PSScriptRoot 'smartctl.exe') }
+        $cands += (Join-Path $env:LOCALAPPDATA 'disk-toolkit\smartctl\bin\smartctl.exe')
+        if ($env:ProgramFiles) { $cands += (Join-Path $env:ProgramFiles 'smartmontools\bin\smartctl.exe') }
+        foreach ($c in $cands) { if ($c -and (Test-Path $c)) { $found = $c; break } }
+    }
+    if (-not $found) { $found = Install-SmartCtl }
+    $script:smartctlPath = $found
+    return $found
+}
+
+function Get-SmartViaCtl($diskNum) {
+    $exe = Get-SmartCtl
+    if (-not $exe) { return $null }
+    try {
+        $dev = "\\.\PhysicalDrive$diskNum"
+        $txt = & $exe -j -x -d auto $dev 2>$null | Out-String
+        if (-not $txt -or -not $txt.Trim()) { return $null }
+        $o = $txt | ConvertFrom-Json -ErrorAction Stop
+    } catch { return $null }
+
+    $r = @{ Source='smartctl'; Model=$o.model_name; Serial=$o.serial_number; Verdict=$null;
+            PowerOnHours=$null; Temp=$null; TempMax=$null; Realloc=$null; Pending=$null;
+            Uncorr=$null; ReallEvt=$null; ReadErr=$null; WriteErr=$null; Wear=$null; LifeLeft=$null; Note=$null }
+
+    if ($o.power_on_time -and $null -ne $o.power_on_time.hours) { $r.PowerOnHours = $o.power_on_time.hours }
+    if ($o.temperature  -and $null -ne $o.temperature.current) { $r.Temp = $o.temperature.current }
+    if ($o.smart_status -and $null -ne $o.smart_status.passed) {
+        $r.Verdict = if ($o.smart_status.passed) { 'OK - SMART passou' } else { '!! FALHA - SMART reprovou; faca backup JA' }
+    }
+
+    $nvme = $o.nvme_smart_health_information_log
+    if ($nvme) {
+        $r.Note = 'NVMe'
+        if ($null -ne $nvme.power_on_hours)  { $r.PowerOnHours = $nvme.power_on_hours }
+        if ($null -ne $nvme.temperature)     { $r.Temp = $nvme.temperature }
+        if ($null -ne $nvme.media_errors)    { $r.Uncorr = $nvme.media_errors }
+        if ($null -ne $nvme.percentage_used) { $r.Wear = $nvme.percentage_used; $r.LifeLeft = 100 - $nvme.percentage_used }
+        if ($nvme.critical_warning -and $nvme.critical_warning -ne 0) {
+            $r.Verdict = "!! AVISO CRITICO NVMe (critical_warning=$($nvme.critical_warning))"
+        }
+    } else {
+        $tab = $o.ata_smart_attributes.table
+        if ($tab) {
+            $g = { param($id) $a = $tab | Where-Object { $_.id -eq $id } | Select-Object -First 1; if ($a) { $a.raw.value } else { $null } }
+            $r.Realloc  = & $g 5
+            $r.Pending  = & $g 197
+            $r.Uncorr   = & $g 198
+            $r.ReallEvt = & $g 196
+            # desgaste SSD: 231 (SSD Life Left) / 177 (Wear Leveling) / 233 - value normalizado = % restante
+            $life = $tab | Where-Object { $_.id -in @(231,177,233) } | Select-Object -First 1
+            if ($life -and $null -ne $life.value) { $r.LifeLeft = $life.value; $r.Wear = 100 - $life.value }
+        }
+    }
+    return $r
+}
+
+function Get-SmartViaWmi($diskNum, $disk) {
+    $reliab = Get-StorageReliabilityCounter -PhysicalDisk $disk -ErrorAction SilentlyContinue
+    $raw    = Get-RawSmart $diskNum
+
+    $pick = { param([bool]$dz, $vals) foreach ($v in $vals) { if ($null -eq $v) { continue }; if ("$v".Trim() -eq '') { continue }; if ($dz -and ($v -eq 0)) { continue }; return $v }; return $null }
     $attr = { param($id) if ($raw -and $raw.Attrs.ContainsKey($id)) { $raw.Attrs[$id].Raw } else { $null } }
 
-    # --- Veredito geral ---
-    $verdict = "Indeterminado"
+    $verdict = $null
     if ($raw -and $null -ne $raw.PredictFailure) {
-        $verdict = if ($raw.PredictFailure) { "!! FALHA PREVISTA - faca backup ja (Reason $($raw.Reason))" } else { "OK - sem falha prevista" }
-    } elseif ($disk.HealthStatus) {
-        $verdict = switch ("$($disk.HealthStatus)") {
-            'Healthy'   { 'OK - saudavel' }
-            'Warning'   { '! ATENCAO - disco reportou avisos' }
-            'Unhealthy' { '!! CRITICO - disco em pre-falha' }
-            default     { "$($disk.HealthStatus)" }
-        }
+        $verdict = if ($raw.PredictFailure) { "!! FALHA PREVISTA - faca backup ja (Reason $($raw.Reason))" } else { 'OK - sem falha prevista' }
     }
-
-    # --- Coleta de campos (reliability counter -> raw SMART como fallback) ---
     $tempAttr = $null
     if ($raw -and $raw.Attrs.ContainsKey(194)) { $tempAttr = ($raw.Attrs[194].Raw -band 0xFF) }
-    # Vida util SSD: 0xE7(231) SSD Life Left (value=% restante)
     $lifeLeft = $null
     if ($raw -and $raw.Attrs.ContainsKey(231)) { $lifeLeft = $raw.Attrs[231].Value }
     $wearFromLife = $null
     if ($null -ne $lifeLeft) { $wearFromLife = 100 - $lifeLeft }
+    $note = $null
+    if (-not $reliab -and -not $raw) { $note = 'nenhuma fonte WMI respondeu (USB/RAID?)' }
 
-    $powerOn  = & $pick $false @($reliab.PowerOnHours, (& $attr 9))
-    $temp     = & $pick $true  @($reliab.Temperature, $tempAttr)
-    $tempMax  = & $pick $true  @($reliab.TemperatureMax)
-    $realloc  = & $pick $false @((& $attr 5), $reliab.ReadErrorsUncorrected)
-    $pending  = & $attr 197
-    $uncorr   = & $pick $false @((& $attr 198), $reliab.ReadErrorsUncorrected)
-    $reallEvt = & $attr 196
-    $rdErr    = $reliab.ReadErrorsTotal
-    $wrErr    = $reliab.WriteErrorsTotal
-    $wear     = & $pick $false @($reliab.Wear, $wearFromLife)
+    return @{
+        Source='wmi'; Model=$disk.FriendlyName; Serial=$disk.SerialNumber; Verdict=$verdict;
+        PowerOnHours = (& $pick $false @($reliab.PowerOnHours, (& $attr 9)));
+        Temp     = (& $pick $true  @($reliab.Temperature, $tempAttr));
+        TempMax  = (& $pick $true  @($reliab.TemperatureMax));
+        Realloc  = (& $pick $false @((& $attr 5), $reliab.ReadErrorsUncorrected));
+        Pending  = (& $attr 197);
+        Uncorr   = (& $pick $false @((& $attr 198), $reliab.ReadErrorsUncorrected));
+        ReallEvt = (& $attr 196);
+        ReadErr  = $reliab.ReadErrorsTotal;
+        WriteErr = $reliab.WriteErrorsTotal;
+        Wear     = (& $pick $false @($reliab.Wear, $wearFromLife));
+        LifeLeft = $lifeLeft;
+        Note     = $note
+    }
+}
 
-    $tempStr = Fmt-Val $temp ' C'
-    if ($null -ne $tempMax) { $tempStr += "  (max: $tempMax C)" }
+function Exec-Smart {
+    $diskNum = $script:ctx.disk.SelectedItem.Number
+    $disk    = Get-PhysicalDisk | Where-Object { $_.DeviceId -eq $diskNum }
+    Set-Status "Lendo SMART..." ([System.Drawing.Color]::DarkOrange)
 
-    # --- Monta linhas e alinha automaticamente ---
+    $d = Get-SmartViaCtl $diskNum
+    if (-not $d) { $d = Get-SmartViaWmi $diskNum $disk }
+
+    $verdict = $d.Verdict
+    if (-not $verdict) {
+        $verdict = switch ("$($disk.HealthStatus)") {
+            'Healthy'   { 'OK - saudavel' }
+            'Warning'   { '! ATENCAO - disco reportou avisos' }
+            'Unhealthy' { '!! CRITICO - disco em pre-falha' }
+            default     { Fmt-Val $disk.HealthStatus }
+        }
+    }
+
+    $tempStr = Fmt-Val $d.Temp ' C'
+    if ($null -ne $d.TempMax) { $tempStr += "  (max: $($d.TempMax) C)" }
+
     $rows = @(
-        ,@('Modelo',              $disk.FriendlyName)
-        ,@('Serial',              $disk.SerialNumber)
+        ,@('Modelo',              (Fmt-Val $d.Model))
+        ,@('Serial',              (Fmt-Val $d.Serial))
         ,@('Tipo / Barramento',   "$($disk.MediaType) / $($disk.BusType)")
         ,@('Saude (resumo)',      $verdict)
         ,@('OperationalStatus',   $disk.OperationalStatus)
-        ,@('Horas ligado',        (Fmt-Val $powerOn ' h'))
+        ,@('Horas ligado',        (Fmt-Val $d.PowerOnHours ' h'))
         ,@('Temperatura',         $tempStr)
-        ,@('Setores realocados',  (Fmt-Val $realloc))
-        ,@('Setores pendentes',   (Fmt-Val $pending))
-        ,@('Setores incorrigiveis', (Fmt-Val $uncorr))
-        ,@('Eventos de realloc',  (Fmt-Val $reallEvt))
-        ,@('Erros de leitura',    (Fmt-Val $rdErr))
-        ,@('Erros de escrita',    (Fmt-Val $wrErr))
-        ,@('Desgaste (wear)',     (Fmt-Val $wear ' %'))
+        ,@('Setores realocados',  (Fmt-Val $d.Realloc))
+        ,@('Setores pendentes',   (Fmt-Val $d.Pending))
+        ,@('Setores incorrigiveis', (Fmt-Val $d.Uncorr))
+        ,@('Eventos de realloc',  (Fmt-Val $d.ReallEvt))
+        ,@('Erros de leitura',    (Fmt-Val $d.ReadErr))
+        ,@('Erros de escrita',    (Fmt-Val $d.WriteErr))
+        ,@('Desgaste (wear)',     (Fmt-Val $d.Wear ' %'))
     )
-    if ($null -ne $lifeLeft) { $rows += ,@('Vida util restante (SSD)', "$lifeLeft %") }
+    if ($null -ne $d.LifeLeft) { $rows += ,@('Vida util restante', "$($d.LifeLeft) %") }
 
     $pad = ($rows | ForEach-Object { $_[0].Length } | Measure-Object -Maximum).Maximum
     $out = "=== S.M.A.R.T. - Disk $diskNum ===`n`n"
     foreach ($r in $rows) { $out += ("{0} : {1}`n" -f $r[0].PadRight($pad), $r[1]) }
 
-    if (-not $reliab -and -not $raw) {
-        $out += "`n(Nenhuma fonte de SMART respondeu - comum em discos USB/externos ou`n RAID. Tente com o disco conectado direto na SATA/NVMe.)`n"
-    } elseif (-not $reliab) {
-        $out += "`n(Contador de confiabilidade indisponivel; dados vindos do SMART cru via WMI.)`n"
-    }
+    $out += "`nFonte: $($d.Source)"
+    if ($d.Note) { $out += " ($($d.Note))" }
+    if ($d.Source -eq 'wmi') { $out += "`n(WMI nativo - dados limitados. Instale o smartctl p/ SMART completo, inclusive NVMe.)" }
 
     Set-Output $out
     Set-Status "OK" ([System.Drawing.Color]::DarkGreen)
