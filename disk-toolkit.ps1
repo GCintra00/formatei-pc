@@ -811,12 +811,14 @@ function Get-SmartViaCtl($diskNum) {
     $dev    = "\\.\PhysicalDrive$diskNum"
     $letter = [char]([int][char]'a' + $diskNum)
     # smartctl no Windows aceita varias formas; tentamos ate uma trazer dados.
+    # /dev/sdX vem 1o: na pratica e o que auto-detecta tipo (ATA/NVMe) nesta build;
+    # \\.\PhysicalDriveN as vezes da "Unable to detect device type".
     $tries = @(
+        @('-j','-x',"/dev/sd$letter"),
         @('-j','-x','-d','auto',$dev),
         @('-j','-x',$dev),
         @('-j','-x','-d','sat',$dev),
-        @('-j','-x','-d','nvme',$dev),
-        @('-j','-x',"/dev/sd$letter")
+        @('-j','-x','-d','nvme',$dev)
     )
     $hasData = { param($c) [bool]($c.model_name -or $c.nvme_smart_health_information_log -or ($c.ata_smart_attributes -and $c.ata_smart_attributes.table) -or ($c.power_on_time -and $c.power_on_time.hours)) }
     $o = $null
