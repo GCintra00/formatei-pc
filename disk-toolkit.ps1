@@ -125,13 +125,103 @@ function Get-RawSmart($diskNum) {
     } catch { return $null }
 }
 
+# --- Mapeamento disco <-> letra e interpretacoes (usado em varias telas) ---
+function Get-DiskLettersMap {
+    # DiskNumber -> "C:, D:"
+    $map = @{}
+    Get-Partition -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter } | ForEach-Object {
+        $n = [int]$_.DiskNumber
+        if (-not $map.ContainsKey($n)) { $map[$n] = @() }
+        $map[$n] += "$($_.DriveLetter):"
+    }
+    $out = @{}
+    foreach ($k in $map.Keys) { $out[$k] = ($map[$k] -join ', ') }
+    return $out
+}
+
+function Get-LetterDiskInfo($letter) {
+    # Para um volume, devolve "Disk N - Modelo - Bus" do disco fisico onde ele mora
+    try {
+        $p = Get-Partition -DriveLetter $letter -ErrorAction Stop
+        $n = [int]$p.DiskNumber
+        $d = Get-Disk -Number $n -ErrorAction Stop
+        $phys = Get-PhysicalDisk | Where-Object { $_.DeviceId -eq $n }
+        $bus = if ($phys) { $phys.BusType } else { $d.BusType }
+        return "Disk $n - $($d.FriendlyName) - $bus"
+    } catch { return $null }
+}
+
+function Get-VolumeMediaType($letter) {
+    # 'HDD' / 'SSD' / 'Desconhecido' para o disco fisico de um volume
+    try {
+        $n = (Get-Partition -DriveLetter $letter -ErrorAction Stop).DiskNumber
+        $mt = (Get-PhysicalDisk | Where-Object { $_.DeviceId -eq $n }).MediaType
+        if ("$mt" -eq 'HDD') { return 'HDD' }
+        if ("$mt" -eq 'SSD') { return 'SSD' }
+        return 'Desconhecido'
+    } catch { return 'Desconhecido' }
+}
+
+function Get-FragPct($letter) {
+    # Le % de fragmentacao via 'defrag /A'. Best-effort e tolerante a idioma:
+    # pega o % numa linha que contenha "fragment" (raiz comum a EN/PT/ES). N/D se nao achar.
+    try {
+        $txt = (& defrag "${letter}:" /A 2>&1 | Out-String)
+        $best = $null
+        foreach ($line in ($txt -split "`n")) {
+            if ($line -imatch 'fragment') {
+                $m = [regex]::Match($line, '(\d+)\s*%')
+                if ($m.Success) {
+                    $v = [int]$m.Groups[1].Value
+                    if ($null -eq $best -or $v -gt $best) { $best = $v }
+                }
+            }
+        }
+        return $best
+    } catch { return $null }
+}
+
+function Get-LifeBand($pct) {
+    # Faixa qualitativa de vida util restante (SSD/NVMe)
+    if ($null -eq $pct) { return $null }
+    if ($pct -ge 90) { return 'excelente' }
+    if ($pct -ge 70) { return 'saudavel' }
+    if ($pct -ge 40) { return 'uso moderado' }
+    if ($pct -ge 20) { return 'desgaste alto - planejar troca' }
+    return 'CRITICO - trocar'
+}
+
+function Get-TempTag($c) {
+    if ($null -eq $c) { return $null }
+    if ($c -le 55) { return 'ok' }
+    if ($c -le 65) { return 'morno' }
+    return 'quente'
+}
+
+function Get-HoursAge($h) {
+    # "25314 h (~2,9 anos)"
+    if ($null -eq $h) { return $null }
+    $anos = [math]::Round($h / 8760.0, 1)
+    return "$h h (~$anos anos)"
+}
+
 function Get-DiskDropdownItems($includeSystem=$false) {
     $disks = if ($includeSystem) { Get-AllDisks } else { Get-NonSystemDisks }
+    $lettersMap = Get-DiskLettersMap
+    # modelos repetidos -> desambiguar com pedaco do serial
+    $dupModels = @($disks | Group-Object FriendlyName | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name })
     $items = @()
     foreach ($d in $disks) {
+        $name = $d.FriendlyName
+        if (($dupModels -contains $name) -and $d.SerialNumber) {
+            $sn = "$($d.SerialNumber)".Trim()
+            $tail = if ($sn.Length -gt 5) { $sn.Substring($sn.Length - 5) } else { $sn }
+            $name = "$name (SN..$tail)"
+        }
+        $letters = if ($lettersMap.ContainsKey([int]$d.Number)) { "  [$($lettersMap[[int]$d.Number])]" } else { "  [sem letra]" }
         $items += [PSCustomObject]@{
             Number = $d.Number
-            Display = "Disk $($d.Number) - $($d.FriendlyName) - $(Format-Bytes $d.Size) ($($d.BusType))"
+            Display = "Disk $($d.Number) - $name - $(Format-Bytes $d.Size) ($($d.BusType))$letters"
         }
     }
     return $items
@@ -141,9 +231,11 @@ function Get-VolumeDropdownItems {
     $vols = Get-Volume | Where-Object { $_.DriveLetter -and $_.FileSystem }
     $items = @()
     foreach ($v in $vols) {
+        $diskInfo = Get-LetterDiskInfo $v.DriveLetter
+        $tail = if ($diskInfo) { "   -> [$diskInfo]" } else { "" }
         $items += [PSCustomObject]@{
             Letter = $v.DriveLetter
-            Display = "$($v.DriveLetter): - $($v.FileSystemLabel) - $(Format-Bytes $v.Size) - $($v.FileSystem)"
+            Display = "$($v.DriveLetter): - $($v.FileSystemLabel) - $(Format-Bytes $v.Size) - $($v.FileSystem)$tail"
         }
     }
     return $items
@@ -159,9 +251,10 @@ $script:actions = @(
     # === INFORMACAO ===
     @{Id='smart'; Name='S.M.A.R.T. (Saude do disco)'; Cat='INFORMACAO'; Desc='Le o status auto-reportado pelo proprio drive. Mostra saude geral (OK/Warning/Critical), horas de uso, temperatura, setores realocados e contagem de erros. Util pra detectar disco em pre-falha antes que dê problema serio.'},
     @{Id='info'; Name='Informacoes detalhadas'; Cat='INFORMACAO'; Desc='Mostra tudo que da pra saber sobre um disco: modelo, serial, firmware, tipo (HDD/SSD/NVMe), tabela (GPT/MBR), barramento (SATA/USB/NVMe), tamanho total, particoes existentes e seus filesystems.'},
+    @{Id='overview'; Name='Visao geral - todos os discos'; Cat='INFORMACAO'; Desc='Lista TODOS os discos de uma vez numa tabela: numero, modelo, tipo (HDD/SSD/NVMe), saude, vida util (com faixa: excelente/saudavel/moderado/desgaste alto/critico) e as letras de cada disco. Responde num olhar "qual disco e qual" e "qual SSD esta mais gasto". Clique Executar pra atualizar.'},
 
     # === PARTICAO ===
-    @{Id='wipe'; Name='Apagar e formatar (Wipe & Format)'; Cat='PARTICAO'; Desc='ATENCAO: Operacao destrutiva. Apaga TUDO do disco (partições, dados, recovery, OEM), cria nova tabela GPT, cria uma unica particao ocupando o disco inteiro e formata em NTFS com a label escolhida. Use pra preparar HDD secundario novo ou limpar HDD vindo de outro PC.'},
+    @{Id='wipe'; Name='Apagar e formatar (Wipe & Format)'; Cat='PARTICAO'; Desc='ATENCAO: Operacao destrutiva. Apaga TUDO do disco (partições, dados, recovery, OEM), cria nova tabela GPT, cria uma unica particao ocupando o disco inteiro e formata em NTFS. O modo normal e rapido (apaga a tabela). Marque "Formatacao SEGURA" pra ZERAR todos os setores (irrecuperavel por endereco) - so funciona em HD (em SSD e bloqueado) e pode levar HORAS num disco grande.'},
     @{Id='label'; Name='Trocar label do volume'; Cat='PARTICAO'; Desc='Renomeia o volume (ex: "HDD" para "Backup") sem precisar formatar nem perder nenhum dado. So muda o nome que aparece no Explorer.'},
     @{Id='letter'; Name='Trocar letra de drive'; Cat='PARTICAO'; Desc='Reatribui a letra do drive (ex: E: vira D:) sem mexer nos dados. Util quando o Windows escolhe uma letra esquisita ou voce quer organizar.'},
     @{Id='resize'; Name='Redimensionar particao'; Cat='PARTICAO'; Desc='Diminui ou aumenta o tamanho de uma particao existente, sem perder dados. Pra diminuir, precisa ter espaco livre no volume. Pra aumentar, precisa ter espaco nao alocado adjacente no disco.'},
@@ -183,7 +276,10 @@ $script:actions = @(
 
     # === REDE ===
     @{Id='share'; Name='Compartilhar pasta na rede (SMB)'; Cat='REDE'; Desc='Cria um compartilhamento SMB de uma pasta no PC, com usuario/senha de acesso. Configura permissoes NTFS, abre o firewall pra SMB e devolve o caminho UNC (\\IP\Nome) pra acessar de outras maquinas Windows. Util pra disponibilizar uma pasta de trabalho ou backup acessivel pela rede interna - estilo Move Docs.'},
-    @{Id='listshares'; Name='Cortar compartilhamento de rede'; Cat='REDE'; Desc='Lista todos os compartilhamentos SMB ativos no PC (ocultos C$/ADMIN$ ja filtrados). Selecione um e clique Executar pra remove-lo. Nao apaga a pasta nem o usuario, so para de compartilhar.'}
+    @{Id='listshares'; Name='Cortar compartilhamento de rede'; Cat='REDE'; Desc='Lista todos os compartilhamentos SMB ativos no PC (ocultos C$/ADMIN$ ja filtrados). Selecione um e clique Executar pra remove-lo. Nao apaga a pasta nem o usuario, so para de compartilhar.'},
+
+    # === SISTEMA ===
+    @{Id='activate'; Name='Ativar Windows (licenca da placa-mae)'; Cat='SISTEMA'; Desc='Le a chave OEM gravada no firmware da placa-mae (tabela MSDM) - a licenca que JA veio comprada com o PC - e mostra o status de ativacao, o tipo de licenca (OEM/Retail/Volume/KMS) e a validade (OEM/Retail = permanente, sem expiracao). Marque "Forcar reativacao" pra instalar a chave OEM e reativar (util apos reinstalar o Windows). Nao funciona em placa sem licenca embutida (avisa).'}
 )
 
 # ============= UI =============
@@ -450,9 +546,10 @@ function Build-Panel($actionId) {
         'wipe' {
             Add-Label 10 10 460 22 "Selecione o disco (sistema oculto - bloqueado):" $true
             $script:ctx.disk = Add-Combo 10 35 460 (Get-DiskDropdownItems $false)
-            Add-Label 10 70 200 22 "Label do novo volume:" $true
-            $script:ctx.label = Add-Textbox 10 95 200 "HDD"
-            Add-Label 10 130 460 80 "ATENCAO: Esta operacao apaga TUDO no disco selecionado.`nNao ha como desfazer."
+            Add-Label 10 68 200 22 "Label do novo volume:" $true
+            $script:ctx.label = Add-Textbox 10 92 200 "HDD"
+            $script:ctx.secure = Add-Checkbox 10 122 460 "Formatacao SEGURA (zera setores - SO HD, MUITO LENTO)" $false
+            Add-Label 10 150 460 100 "ATENCAO: apaga TUDO no disco, sem desfazer.`n`nFormatacao segura zera todos os setores (irrecuperavel) - SO funciona em HD.`nEm SSD/NVMe nao garante e sera bloqueada (use secure erase do fabricante).`nZerar um HD grande pode levar HORAS."
         }
         'label' {
             Add-Label 10 10 200 22 "Selecione o volume:" $true
@@ -489,12 +586,27 @@ function Build-Panel($actionId) {
             Add-Label 10 195 460 30 "ATENCAO: apaga todos os dados da particao."
         }
         'chkdsk' {
-            Add-Label 10 10 200 22 "Selecione o volume:" $true
-            $script:ctx.vol = Add-Combo 10 35 460 (Get-VolumeDropdownItems)
-            $script:ctx.fix = Add-Checkbox 10 70 460 "Corrigir erros encontrados (chkdsk /f)" $false
-            $script:ctx.scan = Add-Checkbox 10 95 460 "Verificar e marcar setores defeituosos (chkdsk /r - LENTO)" $false
-            Add-Label 10 130 460 60 "Em uma partição em uso, sera agendado pra rodar no proximo boot."
-            $script:ctx.output = Add-Multiline 10 195 460 75
+            Add-Label 10 8 200 22 "Selecione o volume:" $true
+            $script:ctx.vol = Add-Combo 10 32 460 (Get-VolumeDropdownItems)
+            $script:ctx.online = Add-Checkbox 10 60 460 "Verificacao online rapida (/scan - nao precisa reboot)" $true
+            $script:ctx.fix    = Add-Checkbox 10 82 460 "Corrigir erros (/f - agenda no boot se em uso)" $false
+            $script:ctx.scan   = Add-Checkbox 10 104 460 "Varredura de setores defeituosos (/r - MUITO LENTO)" $false
+
+            $btnSched = New-Object System.Windows.Forms.Button
+            $btnSched.Text = "Ver agendamento"
+            $btnSched.Location = New-Object System.Drawing.Point(10, 132)
+            $btnSched.Size = New-Object System.Drawing.Size(150, 26)
+            $btnSched.Add_Click({ Show-ChkdskSchedule })
+            $paramPanel.Controls.Add($btnSched)
+
+            $btnCancelSched = New-Object System.Windows.Forms.Button
+            $btnCancelSched.Text = "Cancelar agendamento"
+            $btnCancelSched.Location = New-Object System.Drawing.Point(170, 132)
+            $btnCancelSched.Size = New-Object System.Drawing.Size(160, 26)
+            $btnCancelSched.Add_Click({ Cancel-ChkdskSchedule })
+            $paramPanel.Controls.Add($btnCancelSched)
+
+            $script:ctx.output = Add-Multiline 10 164 460 106
         }
         'defrag' {
             Add-Label 10 10 200 22 "Selecione o volume:" $true
@@ -682,6 +794,29 @@ function Build-Panel($actionId) {
             $paramPanel.Controls.Add($script:ctx.profiles)
             Add-Label 10 240 460 30 "Selecione um perfil e clique Executar pra apagar."
         }
+        'overview' {
+            Add-Label 10 10 460 22 "Todos os discos (clique Executar pra atualizar):" $true
+            $script:ctx.overviewList = New-Object System.Windows.Forms.ListView
+            $script:ctx.overviewList.Location = New-Object System.Drawing.Point(10, 35)
+            $script:ctx.overviewList.Size = New-Object System.Drawing.Size(460, 235)
+            $script:ctx.overviewList.View = "Details"
+            $script:ctx.overviewList.FullRowSelect = $true
+            $script:ctx.overviewList.GridLines = $true
+            $script:ctx.overviewList.Font = New-Object System.Drawing.Font("Consolas", 8)
+            $script:ctx.overviewList.Columns.Add("Disk", 36) | Out-Null
+            $script:ctx.overviewList.Columns.Add("Modelo", 135) | Out-Null
+            $script:ctx.overviewList.Columns.Add("Tipo", 48) | Out-Null
+            $script:ctx.overviewList.Columns.Add("Saude", 50) | Out-Null
+            $script:ctx.overviewList.Columns.Add("Vida util", 125) | Out-Null
+            $script:ctx.overviewList.Columns.Add("Letras", 58) | Out-Null
+            $paramPanel.Controls.Add($script:ctx.overviewList)
+            Populate-Overview
+        }
+        'activate' {
+            Add-Label 10 10 460 42 "Le a chave OEM da placa-mae (firmware/MSDM) e mostra status, tipo de licenca e validade. OEM/Retail = permanente." $false
+            $script:ctx.reactivate = Add-Checkbox 10 56 460 "Forcar reativacao (instala a chave OEM e ativa)" $false
+            $script:ctx.output = Add-Multiline 10 85 460 185
+        }
     }
 }
 
@@ -734,6 +869,8 @@ function Execute-Action($id) {
             'helpcmds'   { Invoke-HelpCommand }
             'smart'      { Exec-Smart }
             'info'       { Exec-Info }
+            'overview'   { Populate-Overview }
+            'activate'   { Exec-Activate }
             'wipe'       { Exec-Wipe }
             'label'      { Exec-Label }
             'letter'     { Exec-Letter }
@@ -939,8 +1076,19 @@ function Exec-Smart {
         }
     }
 
+    # Temperatura com interpretacao (ok/morno/quente) e max se houver
     $tempStr = Fmt-Val $d.Temp ' C'
+    $ttag = Get-TempTag $d.Temp
+    if ($null -ne $d.Temp -and $ttag) { $tempStr += " ($ttag)" }
     if ($null -ne $d.TempMax) { $tempStr += "  (max: $($d.TempMax) C)" }
+
+    # Horas com idade em anos
+    $horasStr = if ($null -ne $d.PowerOnHours) { Get-HoursAge $d.PowerOnHours } else { Fmt-Val $d.PowerOnHours ' h' }
+
+    # Vida util com faixa qualitativa
+    $lifeStr = Fmt-Field $d.LifeLeft ' %' $false
+    $lifeBand = Get-LifeBand $d.LifeLeft
+    if (($null -ne $d.LifeLeft) -and $lifeBand) { $lifeStr += " ($lifeBand)" }
 
     # Aplicabilidade por tipo: setores realocados/pendentes/eventos sao conceito
     # ATA (nao se aplicam a NVMe); desgaste/vida util nao se aplicam a HDD.
@@ -953,7 +1101,7 @@ function Exec-Smart {
         ,@('Tipo / Barramento',   "$($disk.MediaType) / $($disk.BusType)")
         ,@('Saude (resumo)',      $verdict)
         ,@('OperationalStatus',   $disk.OperationalStatus)
-        ,@('Horas ligado',        (Fmt-Val $d.PowerOnHours ' h'))
+        ,@('Horas ligado',        $horasStr)
         ,@('Temperatura',         $tempStr)
         ,@('Setores realocados',  (Fmt-Field $d.Realloc '' $isNVMe))
         ,@('Setores pendentes',   (Fmt-Field $d.Pending '' $isNVMe))
@@ -963,7 +1111,7 @@ function Exec-Smart {
         ,@('Erros de escrita',    (Fmt-Val $d.WriteErr))
         ,@('Desgaste (wear)',     (Fmt-Field $d.Wear ' %' $isHDD))
     )
-    if (-not $isHDD) { $rows += ,@('Vida util restante', (Fmt-Field $d.LifeLeft ' %' $false)) }
+    if (-not $isHDD) { $rows += ,@('Vida util restante', $lifeStr) }
 
     $pad = ($rows | ForEach-Object { $_[0].Length } | Measure-Object -Maximum).Maximum
     $out = "=== S.M.A.R.T. - Disk $diskNum ===`n`n"
@@ -975,6 +1123,8 @@ function Exec-Smart {
         $out += "`n(WMI nativo - dados limitados.)"
         if ($script:lastSmartctlMsg) { $out += "`nsmartctl rodou mas nao leu o disco: $($script:lastSmartctlMsg)" }
     }
+    $out += "`n`nLegenda: N/A = nao se aplica a este tipo de disco | N/D = nao reportado pelo disco"
+    $out += "`nVida util: >=90 excelente | 70-89 saudavel | 40-69 moderado | 20-39 desgaste alto | <20 critico"
 
     Set-Output $out
     Set-Status "OK" ([System.Drawing.Color]::DarkGreen)
@@ -1006,6 +1156,131 @@ function Exec-Info {
     Set-Status "OK" ([System.Drawing.Color]::DarkGreen)
 }
 
+function Populate-Overview {
+    $lv = $script:ctx.overviewList
+    if (-not $lv) { return }
+    $lv.Items.Clear()
+    Set-Status "Lendo discos..." ([System.Drawing.Color]::DarkOrange)
+    $lettersMap = Get-DiskLettersMap
+    $disks = Get-AllDisks
+    $dupModels = @($disks | Group-Object FriendlyName | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name })
+
+    foreach ($d in $disks) {
+        $n = [int]$d.Number
+        $phys = Get-PhysicalDisk | Where-Object { $_.DeviceId -eq $n }
+        $mt = if ($phys) { "$($phys.MediaType)" } else { '' }
+        $bus = if ($phys) { "$($phys.BusType)" } else { "$($d.BusType)" }
+        $type = if ($bus -eq 'NVMe') { 'NVMe' } elseif ($mt) { $mt } else { '?' }
+        $health = if ($phys) { "$($phys.HealthStatus)" } else { "$($d.HealthStatus)" }
+
+        $name = $d.FriendlyName
+        if (($dupModels -contains $name) -and $d.SerialNumber) {
+            $sn = "$($d.SerialNumber)".Trim()
+            $tail = if ($sn.Length -gt 5) { $sn.Substring($sn.Length - 5) } else { $sn }
+            $name = "$name (SN..$tail)"
+        }
+
+        $sm = Get-SmartViaCtl $n
+        if (-not $sm -and $phys) { $sm = Get-SmartViaWmi $n $phys }
+        if ($mt -eq 'HDD') {
+            $life = 'N/A (HDD)'
+        } elseif ($null -ne $sm.LifeLeft) {
+            $b = Get-LifeBand $sm.LifeLeft
+            $life = "$($sm.LifeLeft)% ($b)"
+        } else {
+            $life = 'N/D'
+        }
+        $letters = if ($lettersMap.ContainsKey($n)) { $lettersMap[$n] } else { '-' }
+
+        $item = New-Object System.Windows.Forms.ListViewItem("$n")
+        $item.SubItems.Add($name) | Out-Null
+        $item.SubItems.Add($type) | Out-Null
+        $item.SubItems.Add($health) | Out-Null
+        $item.SubItems.Add($life) | Out-Null
+        $item.SubItems.Add($letters) | Out-Null
+        $lv.Items.Add($item) | Out-Null
+    }
+    Set-Status "Visao geral atualizada ($(@($disks).Count) discos)" ([System.Drawing.Color]::DarkGreen)
+}
+
+function Exec-Activate {
+    $out = "=== Ativacao do Windows ===`n`n"
+    $svc = Get-CimInstance SoftwareLicensingService -ErrorAction SilentlyContinue
+    $oemKey = if ($svc) { $svc.OA3xOriginalProductKey } else { $null }
+
+    if ($script:ctx.reactivate.Checked) {
+        if ($oemKey) {
+            Set-Status "Instalando chave OEM e ativando..." ([System.Drawing.Color]::DarkOrange)
+            $slmgr = "$env:windir\system32\slmgr.vbs"
+            cscript //nologo $slmgr /ipk $oemKey 2>&1 | Out-Null
+            cscript //nologo $slmgr /ato   2>&1 | Out-Null
+            $out += "Reativacao executada com a chave OEM do firmware.`n`n"
+        } else {
+            $out += "Reativacao pedida, mas NAO ha chave OEM no firmware - nada a reativar.`n`n"
+        }
+    }
+
+    $prod = Get-CimInstance SoftwareLicensingProduct -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like 'Windows*' -and $_.PartialProductKey } | Select-Object -First 1
+
+    $rows = @()
+    if ($oemKey) {
+        $k = "$oemKey"; $ktail = if ($k.Length -gt 5) { $k.Substring($k.Length - 5) } else { $k }
+        $rows += ,@('Chave OEM (firmware)', "presente (...$ktail)")
+    } else {
+        $rows += ,@('Chave OEM (firmware)', 'nenhuma (placa sem licenca embutida, ou Volume/Retail)')
+    }
+
+    if ($prod) {
+        $ch = "$($prod.ProductKeyChannel)"
+        $chTxt = switch -Wildcard ($ch) {
+            'OEM*'         { 'OEM (placa-mae/fabricante)' }
+            'Retail*'      { 'Retail' }
+            'Volume:MAK*'  { 'Volume (MAK)' }
+            'Volume:GVLK*' { 'Volume (KMS)' }
+            default        { if ($ch) { $ch } else { 'desconhecido' } }
+        }
+        $st = [int]$prod.LicenseStatus
+        $stTxt = switch ($st) {
+            1 { 'ATIVADO' }
+            0 { 'NAO ativado' }
+            2 { 'Carencia (OOB)' }
+            3 { 'Carencia (OOT)' }
+            4 { 'Carencia (nao genuino)' }
+            5 { 'Notificacao (nao ativado)' }
+            6 { 'Carencia estendida' }
+            default { "status $st" }
+        }
+        $perm = ($ch -like 'OEM*' -or $ch -like 'Retail*')
+        if ($st -eq 1 -and $perm) {
+            $val = 'Permanente (sem expiracao)'
+        } elseif ($prod.GracePeriodRemaining -and $prod.GracePeriodRemaining -gt 0) {
+            $dias = [math]::Round($prod.GracePeriodRemaining / 1440.0, 0)
+            $val = "expira/renova em ~$dias dias (Volume/KMS ou carencia)"
+        } elseif ($st -eq 1) {
+            $val = 'Ativado (sem data de expiracao reportada)'
+        } else {
+            $val = 'sem ativacao permanente'
+        }
+        $rows += ,@('Produto', "$($prod.Name)")
+        $rows += ,@('Chave instalada (ult.5)', "$($prod.PartialProductKey)")
+        $rows += ,@('Tipo de licenca', $chTxt)
+        $rows += ,@('Status', $stTxt)
+        $rows += ,@('Validade', $val)
+    } else {
+        $rows += ,@('Status', 'nao foi possivel ler o produto Windows')
+    }
+
+    $pad = ($rows | ForEach-Object { $_[0].Length } | Measure-Object -Maximum).Maximum
+    foreach ($r in $rows) { $out += ("{0} : {1}`n" -f $r[0].PadRight($pad), $r[1]) }
+    if ((-not $script:ctx.reactivate.Checked) -and $oemKey -and ((-not $prod) -or ([int]$prod.LicenseStatus -ne 1))) {
+        $out += "`nDica: marque 'Forcar reativacao' pra instalar a chave OEM e ativar."
+    }
+
+    Set-Output $out
+    Set-Status "Ativacao: verificado" ([System.Drawing.Color]::DarkGreen)
+}
+
 # --- PARTICAO ---
 function Exec-Wipe {
     $sel = $script:ctx.disk.SelectedItem
@@ -1017,16 +1292,36 @@ function Exec-Wipe {
         Show-Msg "BLOQUEADO: disco do sistema." 'Erro' 'Error'; return
     }
 
-    if (-not (Confirm-Action "Apagar TUDO no Disk $($sel.Number) e formatar como NTFS '$label'?`n`nIrreversivel.")) { return }
+    $secure = $false
+    if ($script:ctx.secure) { $secure = $script:ctx.secure.Checked }
+    $phys = Get-PhysicalDisk | Where-Object { $_.DeviceId -eq $sel.Number }
+    $media = if ($phys) { "$($phys.MediaType)" } else { '' }
 
-    Clear-Disk -Number $sel.Number -RemoveData -RemoveOEM -Confirm:$false -ErrorAction Stop
+    # Formatacao segura (zeragem) so vale pra HD
+    if ($secure -and $media -ne 'HDD') {
+        Show-Msg "Formatacao segura (zeragem de setores) so funciona em HD.`n`nEste disco e '$media'. Em SSD/NVMe sobrescrever NAO garante apagamento (wear leveling) - use o secure erase do fabricante.`n`nDesmarque 'Formatacao segura' pra formatar normal." 'Aviso' 'Warning'
+        return
+    }
+
+    $confirmExtra = if ($secure) { "`n`nMODO SEGURO: vai ZERAR todos os setores (diskpart clean all).`nPode levar HORAS num HD grande." } else { "" }
+    if (-not (Confirm-Action "Apagar TUDO no Disk $($sel.Number) e formatar como NTFS '$label'?$confirmExtra`n`nIrreversivel.")) { return }
+
+    if ($secure) {
+        Set-Status "Zerando todos os setores (diskpart clean all) - pode levar horas..." ([System.Drawing.Color]::DarkOrange)
+        $dpScript = "select disk $($sel.Number)`r`nclean all`r`nexit`r`n"
+        $dpScript | diskpart | Out-Null
+    } else {
+        Clear-Disk -Number $sel.Number -RemoveData -RemoveOEM -Confirm:$false -ErrorAction Stop
+    }
+
     $d = Get-Disk -Number $sel.Number
     if ($d.PartitionStyle -eq 'RAW') { Initialize-Disk -Number $sel.Number -PartitionStyle GPT -ErrorAction Stop }
     $part = New-Partition -DiskNumber $sel.Number -UseMaximumSize -AssignDriveLetter -ErrorAction Stop
     Format-Volume -DriveLetter $part.DriveLetter -FileSystem NTFS -NewFileSystemLabel $label -Confirm:$false -Force -ErrorAction Stop | Out-Null
 
-    Show-Msg "Disk $($sel.Number) pronto na letra $($part.DriveLetter): como '$label'" "Sucesso"
-    Set-Status "Disk $($sel.Number) -> $($part.DriveLetter): NTFS '$label'" ([System.Drawing.Color]::DarkGreen)
+    $modo = if ($secure) { " (setores zerados)" } else { "" }
+    Show-Msg "Disk $($sel.Number) pronto na letra $($part.DriveLetter): como '$label'$modo" "Sucesso"
+    Set-Status "Disk $($sel.Number) -> $($part.DriveLetter): NTFS '$label'$modo" ([System.Drawing.Color]::DarkGreen)
 }
 
 function Exec-Label {
@@ -1071,21 +1366,108 @@ function Exec-Format {
 }
 
 # --- MANUTENCAO ---
+function Show-ChkdskSchedule {
+    $sel = $script:ctx.vol.SelectedItem; if (-not $sel) { return }
+    $txt = (cmd /c "chkntfs $($sel.Letter):" 2>&1 | Out-String).Trim()
+    Set-Output ("=== Agendamento CHKDSK - $($sel.Letter): ===`n`n$txt`n`n(Se nao mencionar agendamento/'schedule', nao ha CHKDSK marcado pro proximo boot.)")
+    Set-Status "Agendamento consultado ($($sel.Letter):)" ([System.Drawing.Color]::DarkGreen)
+}
+
+function Cancel-ChkdskSchedule {
+    $sel = $script:ctx.vol.SelectedItem; if (-not $sel) { return }
+    if (-not (Confirm-Action "Cancelar qualquer CHKDSK agendado pra $($sel.Letter): no proximo boot?")) { return }
+    $txt = (cmd /c "chkntfs /x $($sel.Letter):" 2>&1 | Out-String).Trim()
+    Set-Output ("=== Cancelar agendamento - $($sel.Letter): ===`n`nComando: chkntfs /x $($sel.Letter):`n$txt`n`nAgendamento cancelado (se existia).")
+    Set-Status "Agendamento cancelado ($($sel.Letter):)" ([System.Drawing.Color]::DarkGreen)
+}
+
 function Exec-Chkdsk {
     $sel = $script:ctx.vol.SelectedItem; if (-not $sel) { return }
-    $cdArgs = @("$($sel.Letter):")
-    if ($script:ctx.fix.Checked) { $cdArgs += "/f" }
-    if ($script:ctx.scan.Checked) { $cdArgs += "/r" }
-    $output = chkdsk @cdArgs 2>&1 | Out-String
-    $script:ctx.output.Text = $output
-    Set-Status "CHKDSK $($sel.Letter): concluido (ver saida acima)" ([System.Drawing.Color]::DarkGreen)
+    $L = $sel.Letter
+    $cdArgs = @("${L}:")
+    if ($script:ctx.online.Checked) { $cdArgs += "/scan" }
+    if ($script:ctx.fix.Checked)    { $cdArgs += "/f" }
+    if ($script:ctx.scan.Checked)   { $cdArgs += "/r" }
+
+    Set-Status "Rodando CHKDSK em $L`:..." ([System.Drawing.Color]::DarkOrange)
+    # "Y" no stdin responde automaticamente caso o chkdsk pergunte se agenda no boot
+    $output = ("Y" | & chkdsk @cdArgs 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+
+    # Veredito por codigo de saida (independe de idioma do Windows)
+    $verdict = switch ($code) {
+        0 { 'OK - Sem erros no sistema de arquivos' }
+        1 { 'OK - Erros encontrados e CORRIGIDOS' }
+        2 { '! Ha verificacao/limpeza pendente - rode com /f (ou agende)' }
+        3 { '! Nao deu pra verificar agora - sera agendado no proximo boot' }
+        default { "concluido (codigo $code)" }
+    }
+
+    $out  = "=== CHKDSK - $L`: ===`n`n"
+    $out += "Comando   : chkdsk $($cdArgs -join ' ')`n"
+    $out += "Resultado : $verdict`n`n"
+    $out += "PERIGO: se a saida abaixo mostrar KB em setores defeituosos (bad sectors) > 0,`n"
+    $out += "isso e FALHA FISICA do disco - faca backup ja. Confira tambem na tela S.M.A.R.T.`n"
+    $out += "(setores realocados / pendentes).`n`n"
+    $out += "--- saida completa ---`n"
+    $out += $output
+    Set-Output $out
+    Set-Status "CHKDSK $L`: concluido (codigo $code)" ([System.Drawing.Color]::DarkGreen)
 }
 
 function Exec-Defrag {
     $sel = $script:ctx.vol.SelectedItem; if (-not $sel) { return }
-    $output = Optimize-Volume -DriveLetter $sel.Letter -Verbose -ErrorAction Stop 4>&1 | Out-String
-    $script:ctx.output.Text = $output
-    Set-Status "Otimizacao concluida em $($sel.Letter):" ([System.Drawing.Color]::DarkGreen)
+    $L = $sel.Letter
+    $media = Get-VolumeMediaType $L
+
+    $freeBefore = (Get-Volume -DriveLetter $L -ErrorAction SilentlyContinue).SizeRemaining
+    $fragBefore = $null; $fragAfter = $null
+    if ($media -eq 'HDD') {
+        Set-Status "Analisando fragmentacao de $L`:..." ([System.Drawing.Color]::DarkOrange)
+        $fragBefore = Get-FragPct $L
+    }
+
+    Set-Status "Otimizando $L`: (pode demorar)..." ([System.Drawing.Color]::DarkOrange)
+    Optimize-Volume -DriveLetter $L -Verbose -ErrorAction Stop 4>&1 | Out-Null
+
+    if ($media -eq 'HDD') { $fragAfter = Get-FragPct $L }
+    $freeAfter = (Get-Volume -DriveLetter $L -ErrorAction SilentlyContinue).SizeRemaining
+
+    # --- Monta resumo ---
+    $out = "=== Resumo da otimizacao - $L`: ===`n`n"
+    $out += "Tipo de disco  : $media`n"
+
+    if ($media -eq 'HDD') {
+        $out += "Operacao       : Desfragmentacao`n"
+        $bStr = if ($null -ne $fragBefore) { "$fragBefore%" } else { 'N/D' }
+        $aStr = if ($null -ne $fragAfter)  { "$fragAfter%" }  else { 'N/D' }
+        $out += "Fragmentacao   : $bStr -> $aStr`n"
+    } else {
+        $tipoOp = if ($media -eq 'SSD') { 'TRIM/Retrim executado' } else { 'Otimizacao executada' }
+        $out += "Operacao       : $tipoOp`n"
+    }
+
+    if ($null -ne $freeBefore -and $null -ne $freeAfter) {
+        $out += "Espaco livre   : $(Format-Bytes $freeBefore) -> $(Format-Bytes $freeAfter)`n"
+    }
+
+    # --- Veredito ---
+    $verdict = ''
+    if ($media -eq 'HDD' -and $null -ne $fragBefore -and $null -ne $fragAfter) {
+        $drop = $fragBefore - $fragAfter
+        if ($fragBefore -lt 5)      { $verdict = "= Ja estava otimizado (fragmentacao < 5%)" }
+        elseif ($drop -ge 10)       { $verdict = "OK - Sucesso (caiu $drop pontos de fragmentacao)" }
+        elseif ($drop -gt 0)        { $verdict = "~ Moderado (caiu $drop pontos)" }
+        else                        { $verdict = "= Sem mudanca relevante" }
+    } elseif ($media -eq 'SSD') {
+        $verdict = "OK - TRIM concluido (no SSD o ganho e interno, nao ha fragmentacao a medir)"
+    } else {
+        $verdict = "OK - Otimizacao concluida"
+    }
+    $out += "Resultado      : $verdict`n"
+
+    Set-Output $out
+    Set-Status "Otimizacao concluida em $L`:" ([System.Drawing.Color]::DarkGreen)
 }
 
 function Exec-WipeFree {
