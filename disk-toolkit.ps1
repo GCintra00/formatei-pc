@@ -63,6 +63,58 @@ function Format-Bytes($bytes) {
     return "{0:N0} bytes" -f $bytes
 }
 
+function Set-Output($text) {
+    # WinForms TextBox so quebra linha com CRLF; normaliza qualquer LF puro -> CRLF
+    $script:ctx.output.Text = (($text -replace "`r`n", "`n") -replace "`n", "`r`n")
+}
+
+function Fmt-Val($v, $suffix = '') {
+    if ($null -eq $v -or "$v".Trim() -eq '') { return 'N/D' }
+    return "$v$suffix"
+}
+
+function Get-RawSmart($diskNum) {
+    # Le SMART cru via WMI (root\wmi). Funciona em Win10/11 mesmo quando
+    # Get-StorageReliabilityCounter vem vazio. Retorna hashtable ou $null.
+    $res = @{ PredictFailure = $null; Reason = $null; Attrs = @{} }
+    try {
+        $dd = Get-CimInstance Win32_DiskDrive -ErrorAction Stop | Where-Object { $_.Index -eq $diskNum }
+        if (-not $dd) { return $null }
+        $pnp = ($dd.PNPDeviceID).ToLower()
+
+        $matchInst = {
+            param($inst)
+            $k = ($inst.InstanceName -replace '_0$', '').ToLower()
+            return ($k -eq $pnp)
+        }
+
+        $status = Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_FailurePredictStatus -ErrorAction SilentlyContinue
+        if ($status) {
+            $s = $status | Where-Object { & $matchInst $_ } | Select-Object -First 1
+            if (-not $s -and @($status).Count -eq 1) { $s = @($status)[0] }
+            if ($s) { $res.PredictFailure = $s.PredictFailure; $res.Reason = $s.Reason }
+        }
+
+        $pdata = Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_FailurePredictData -ErrorAction SilentlyContinue
+        if ($pdata) {
+            $p = $pdata | Where-Object { & $matchInst $_ } | Select-Object -First 1
+            if (-not $p -and @($pdata).Count -eq 1) { $p = @($pdata)[0] }
+            if ($p -and $p.VendorSpecific) {
+                $vs = $p.VendorSpecific
+                # 2 bytes de versao, depois ate 30 atributos de 12 bytes cada
+                for ($i = 2; ($i + 11) -lt $vs.Length -and $i -lt 362; $i += 12) {
+                    $id = [int]$vs[$i]
+                    if ($id -eq 0) { continue }
+                    $raw = [int64]0
+                    for ($j = 0; $j -lt 6; $j++) { $raw += ([int64]$vs[$i + 5 + $j]) -shl (8 * $j) }
+                    $res.Attrs[$id] = @{ Value = [int]$vs[$i + 3]; Worst = [int]$vs[$i + 4]; Raw = $raw }
+                }
+            }
+        }
+        return $res
+    } catch { return $null }
+}
+
 function Get-DiskDropdownItems($includeSystem=$false) {
     $disks = if ($includeSystem) { Get-AllDisks } else { Get-NonSystemDisks }
     $items = @()
@@ -697,25 +749,86 @@ function Execute-Action($id) {
 # --- INFO ---
 function Exec-Smart {
     $diskNum = $script:ctx.disk.SelectedItem.Number
-    $disk = Get-PhysicalDisk | Where-Object { $_.DeviceId -eq $diskNum }
-    $health = $disk.HealthStatus
-    $reliab = Get-StorageReliabilityCounter -PhysicalDisk $disk -ErrorAction SilentlyContinue
+    $disk    = Get-PhysicalDisk | Where-Object { $_.DeviceId -eq $diskNum }
+    $reliab  = Get-StorageReliabilityCounter -PhysicalDisk $disk -ErrorAction SilentlyContinue
+    $raw     = Get-RawSmart $diskNum
 
-    $out = "=== S.M.A.R.T. - Disk $diskNum ===`n`n"
-    $out += "Modelo:           $($disk.FriendlyName)`n"
-    $out += "Serial:           $($disk.SerialNumber)`n"
-    $out += "Saude:            $health (OperationalStatus: $($disk.OperationalStatus))`n"
-    if ($reliab) {
-        $out += "Horas ligado:     $($reliab.PowerOnHours) h`n"
-        $out += "Temperatura:      $($reliab.Temperature) C  (Max ja registrado: $($reliab.TemperatureMax) C)`n"
-        $out += "Leituras:         $($reliab.ReadErrorsTotal) erros / $($reliab.ReadErrorsUncorrected) nao corrigiveis`n"
-        $out += "Escritas:         $($reliab.WriteErrorsTotal) erros / $($reliab.WriteErrorsUncorrected) nao corrigiveis`n"
-        $out += "Setores realocados: $($reliab.ReadErrorsCorrected)`n"
-        $out += "Wear (uso desgaste): $($reliab.Wear) %`n"
-    } else {
-        $out += "(Driver do disco nao expoe contadores de confiabilidade - normal em USB)`n"
+    # Helper: pega o 1o valor nao nulo/nao vazio (e descarta zeros quando pedido)
+    $pick = {
+        param([bool]$dropZero, $vals)
+        foreach ($v in $vals) {
+            if ($null -eq $v) { continue }
+            if ("$v".Trim() -eq '') { continue }
+            if ($dropZero -and ($v -eq 0)) { continue }
+            return $v
+        }
+        return $null
     }
-    $script:ctx.output.Text = $out
+    $attr = { param($id) if ($raw -and $raw.Attrs.ContainsKey($id)) { $raw.Attrs[$id].Raw } else { $null } }
+
+    # --- Veredito geral ---
+    $verdict = "Indeterminado"
+    if ($raw -and $null -ne $raw.PredictFailure) {
+        $verdict = if ($raw.PredictFailure) { "!! FALHA PREVISTA - faca backup ja (Reason $($raw.Reason))" } else { "OK - sem falha prevista" }
+    } elseif ($disk.HealthStatus) {
+        $verdict = switch ("$($disk.HealthStatus)") {
+            'Healthy'   { 'OK - saudavel' }
+            'Warning'   { '! ATENCAO - disco reportou avisos' }
+            'Unhealthy' { '!! CRITICO - disco em pre-falha' }
+            default     { "$($disk.HealthStatus)" }
+        }
+    }
+
+    # --- Coleta de campos (reliability counter -> raw SMART como fallback) ---
+    $tempAttr = $null
+    if ($raw -and $raw.Attrs.ContainsKey(194)) { $tempAttr = ($raw.Attrs[194].Raw -band 0xFF) }
+    # Vida util SSD: 0xE7(231) SSD Life Left (value=% restante)
+    $lifeLeft = $null
+    if ($raw -and $raw.Attrs.ContainsKey(231)) { $lifeLeft = $raw.Attrs[231].Value }
+    $wearFromLife = $null
+    if ($null -ne $lifeLeft) { $wearFromLife = 100 - $lifeLeft }
+
+    $powerOn  = & $pick $false @($reliab.PowerOnHours, (& $attr 9))
+    $temp     = & $pick $true  @($reliab.Temperature, $tempAttr)
+    $tempMax  = & $pick $true  @($reliab.TemperatureMax)
+    $realloc  = & $pick $false @((& $attr 5), $reliab.ReadErrorsUncorrected)
+    $pending  = & $attr 197
+    $uncorr   = & $pick $false @((& $attr 198), $reliab.ReadErrorsUncorrected)
+    $reallEvt = & $attr 196
+    $rdErr    = $reliab.ReadErrorsTotal
+    $wrErr    = $reliab.WriteErrorsTotal
+    $wear     = & $pick $false @($reliab.Wear, $wearFromLife)
+
+    # --- Monta linhas e alinha automaticamente ---
+    $rows = @(
+        ,@('Modelo',              $disk.FriendlyName)
+        ,@('Serial',              $disk.SerialNumber)
+        ,@('Tipo / Barramento',   "$($disk.MediaType) / $($disk.BusType)")
+        ,@('Saude (resumo)',      $verdict)
+        ,@('OperationalStatus',   $disk.OperationalStatus)
+        ,@('Horas ligado',        (Fmt-Val $powerOn ' h'))
+        ,@('Temperatura',         (Fmt-Val $temp ' C') + '  (max: ' + (Fmt-Val $tempMax ' C') + ')')
+        ,@('Setores realocados',  (Fmt-Val $realloc))
+        ,@('Setores pendentes',   (Fmt-Val $pending))
+        ,@('Setores incorrigiveis', (Fmt-Val $uncorr))
+        ,@('Eventos de realloc',  (Fmt-Val $reallEvt))
+        ,@('Erros de leitura',    (Fmt-Val $rdErr))
+        ,@('Erros de escrita',    (Fmt-Val $wrErr))
+        ,@('Desgaste (wear)',     (Fmt-Val $wear ' %'))
+    )
+    if ($null -ne $lifeLeft) { $rows += ,@('Vida util restante (SSD)', "$lifeLeft %") }
+
+    $pad = ($rows | ForEach-Object { $_[0].Length } | Measure-Object -Maximum).Maximum
+    $out = "=== S.M.A.R.T. - Disk $diskNum ===`n`n"
+    foreach ($r in $rows) { $out += ("{0} : {1}`n" -f $r[0].PadRight($pad), $r[1]) }
+
+    if (-not $reliab -and -not $raw) {
+        $out += "`n(Nenhuma fonte de SMART respondeu - comum em discos USB/externos ou`n RAID. Tente com o disco conectado direto na SATA/NVMe.)`n"
+    } elseif (-not $reliab) {
+        $out += "`n(Contador de confiabilidade indisponivel; dados vindos do SMART cru via WMI.)`n"
+    }
+
+    Set-Output $out
     Set-Status "OK" ([System.Drawing.Color]::DarkGreen)
 }
 
@@ -741,7 +854,7 @@ function Exec-Info {
         try { $label = (Get-Volume -Partition $_).FileSystemLabel } catch {}
         $out += "  Part $($_.PartitionNumber): $letter  $(Format-Bytes $_.Size)  $type  $fs  '$label'`n"
     }
-    $script:ctx.output.Text = $out
+    Set-Output $out
     Set-Status "OK" ([System.Drawing.Color]::DarkGreen)
 }
 
