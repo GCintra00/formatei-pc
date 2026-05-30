@@ -73,6 +73,14 @@ function Fmt-Val($v, $suffix = '') {
     return "$v$suffix"
 }
 
+# Como Fmt-Val, mas se nao houver valor distingue "nao se aplica" (N/A) de
+# "nao reportado" (N/D). Ex.: desgaste em HDD = N/A; setor realocado em NVMe = N/A.
+function Fmt-Field($v, $suffix = '', $notApplicable = $false) {
+    if ($null -ne $v -and "$v".Trim() -ne '') { return "$v$suffix" }
+    if ($notApplicable) { return 'N/A' }
+    return 'N/D'
+}
+
 function Get-RawSmart($diskNum) {
     # Le SMART cru via WMI (root\wmi). Funciona em Win10/11 mesmo quando
     # Get-StorageReliabilityCounter vem vazio. Retorna hashtable ou $null.
@@ -934,6 +942,11 @@ function Exec-Smart {
     $tempStr = Fmt-Val $d.Temp ' C'
     if ($null -ne $d.TempMax) { $tempStr += "  (max: $($d.TempMax) C)" }
 
+    # Aplicabilidade por tipo: setores realocados/pendentes/eventos sao conceito
+    # ATA (nao se aplicam a NVMe); desgaste/vida util nao se aplicam a HDD.
+    $isNVMe = ($disk.BusType -eq 'NVMe') -or ($d.Note -eq 'NVMe')
+    $isHDD  = ($disk.MediaType -eq 'HDD')
+
     $rows = @(
         ,@('Modelo',              (Fmt-Val $d.Model))
         ,@('Serial',              (Fmt-Val $d.Serial))
@@ -942,15 +955,15 @@ function Exec-Smart {
         ,@('OperationalStatus',   $disk.OperationalStatus)
         ,@('Horas ligado',        (Fmt-Val $d.PowerOnHours ' h'))
         ,@('Temperatura',         $tempStr)
-        ,@('Setores realocados',  (Fmt-Val $d.Realloc))
-        ,@('Setores pendentes',   (Fmt-Val $d.Pending))
+        ,@('Setores realocados',  (Fmt-Field $d.Realloc '' $isNVMe))
+        ,@('Setores pendentes',   (Fmt-Field $d.Pending '' $isNVMe))
         ,@('Setores incorrigiveis', (Fmt-Val $d.Uncorr))
-        ,@('Eventos de realloc',  (Fmt-Val $d.ReallEvt))
+        ,@('Eventos de realloc',  (Fmt-Field $d.ReallEvt '' $isNVMe))
         ,@('Erros de leitura',    (Fmt-Val $d.ReadErr))
         ,@('Erros de escrita',    (Fmt-Val $d.WriteErr))
-        ,@('Desgaste (wear)',     (Fmt-Val $d.Wear ' %'))
+        ,@('Desgaste (wear)',     (Fmt-Field $d.Wear ' %' $isHDD))
     )
-    if ($null -ne $d.LifeLeft) { $rows += ,@('Vida util restante', "$($d.LifeLeft) %") }
+    if (-not $isHDD) { $rows += ,@('Vida util restante', (Fmt-Field $d.LifeLeft ' %' $false)) }
 
     $pad = ($rows | ForEach-Object { $_[0].Length } | Measure-Object -Maximum).Maximum
     $out = "=== S.M.A.R.T. - Disk $diskNum ===`n`n"
