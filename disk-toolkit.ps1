@@ -80,12 +80,14 @@ function Get-RawSmart($diskNum) {
     try {
         $dd = Get-CimInstance Win32_DiskDrive -ErrorAction Stop | Where-Object { $_.Index -eq $diskNum }
         if (-not $dd) { return $null }
-        $pnp = ($dd.PNPDeviceID).ToLower()
+        # Normaliza: tira sufixo de instancia (_0, _1...) e qualquer separador.
+        # Comparacao exata era fragil (casava no HDD, falhava no SSD).
+        $pnpKey = ((($dd.PNPDeviceID) -replace '_\d+$', '') -replace '[^A-Za-z0-9]', '').ToLower()
 
         $matchInst = {
             param($inst)
-            $k = ($inst.InstanceName -replace '_0$', '').ToLower()
-            return ($k -eq $pnp)
+            $k = (($inst.InstanceName -replace '_\d+$', '') -replace '[^A-Za-z0-9]', '').ToLower()
+            return ($k -eq $pnpKey)
         }
 
         $status = Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_FailurePredictStatus -ErrorAction SilentlyContinue
@@ -799,6 +801,9 @@ function Exec-Smart {
     $wrErr    = $reliab.WriteErrorsTotal
     $wear     = & $pick $false @($reliab.Wear, $wearFromLife)
 
+    $tempStr = Fmt-Val $temp ' C'
+    if ($null -ne $tempMax) { $tempStr += "  (max: $tempMax C)" }
+
     # --- Monta linhas e alinha automaticamente ---
     $rows = @(
         ,@('Modelo',              $disk.FriendlyName)
@@ -807,7 +812,7 @@ function Exec-Smart {
         ,@('Saude (resumo)',      $verdict)
         ,@('OperationalStatus',   $disk.OperationalStatus)
         ,@('Horas ligado',        (Fmt-Val $powerOn ' h'))
-        ,@('Temperatura',         (Fmt-Val $temp ' C') + '  (max: ' + (Fmt-Val $tempMax ' C') + ')')
+        ,@('Temperatura',         $tempStr)
         ,@('Setores realocados',  (Fmt-Val $realloc))
         ,@('Setores pendentes',   (Fmt-Val $pending))
         ,@('Setores incorrigiveis', (Fmt-Val $uncorr))
