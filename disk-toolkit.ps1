@@ -1113,18 +1113,47 @@ function Exec-Smart {
     )
     if (-not $isHDD) { $rows += ,@('Vida util restante', $lifeStr) }
 
+    # --- Interpretacao curta (topo) ---
+    $alertas = @()
+    foreach ($pair in @(@('setores realocados', $d.Realloc), @('setores pendentes', $d.Pending), @('setores incorrigiveis', $d.Uncorr))) {
+        $v = $pair[1]
+        if (($null -ne $v) -and ([int64]"$v" -gt 0)) { $alertas += "$($pair[0]): $v" }
+    }
+    $lifeLow  = ($null -ne $d.LifeLeft) -and ($d.LifeLeft -lt 20)
+    $lifeWarn = ($null -ne $d.LifeLeft) -and ($d.LifeLeft -lt 40)
+    $tempHot  = ($null -ne $d.Temp) -and ($d.Temp -gt 65)
+    # verdicts de falha comecam com "!!", avisos com "! " (cuidado: "sem falha prevista" e saudavel)
+    $fail     = "$verdict".StartsWith('!!')
+    $verdWarn = "$verdict".StartsWith('! ')
+
+    if (($alertas.Count -gt 0) -or $lifeLow -or $fail) {
+        $overall = 'RISCO ALTO - faca backup e considere trocar o disco'
+    } elseif ($lifeWarn -or $tempHot -or $verdWarn) {
+        $overall = 'ATENCAO - monitorar (sem urgencia)'
+    } else {
+        $overall = 'SAUDAVEL - nada a fazer'
+    }
+
+    $out  = "=== S.M.A.R.T. - Disk $diskNum ($($disk.FriendlyName)) ===`n`n"
+    $out += ">> Interpretacao (resumo):`n"
+    $out += "   Saude    : $verdict`n"
+    if (-not $isHDD) { $out += "   Desgaste : $lifeStr`n" }
+    $out += "   Temp     : $tempStr`n"
+    if ($alertas.Count -gt 0) { $out += "   Alertas  : " + ($alertas -join '; ') + "`n" }
+    $out += "   VEREDITO : $overall`n"
+
+    # --- Detalhes (pra baixo, pra copiar) ---
     $pad = ($rows | ForEach-Object { $_[0].Length } | Measure-Object -Maximum).Maximum
-    $out = "=== S.M.A.R.T. - Disk $diskNum ===`n`n"
+    $out += "`n--- detalhes (copie pra uma IA se quiser interpretar) ---`n"
     foreach ($r in $rows) { $out += ("{0} : {1}`n" -f $r[0].PadRight($pad), $r[1]) }
 
-    $out += "`nFonte: $($d.Source)"
+    $out += "Fonte: $($d.Source)"
     if ($d.Note) { $out += " ($($d.Note))" }
     if ($d.Source -eq 'wmi') {
         $out += "`n(WMI nativo - dados limitados.)"
         if ($script:lastSmartctlMsg) { $out += "`nsmartctl rodou mas nao leu o disco: $($script:lastSmartctlMsg)" }
     }
-    $out += "`n`nLegenda: N/A = nao se aplica a este tipo de disco | N/D = nao reportado pelo disco"
-    $out += "`nVida util: >=90 excelente | 70-89 saudavel | 40-69 moderado | 20-39 desgaste alto | <20 critico"
+    $out += "`nN/A = nao se aplica | N/D = nao reportado"
 
     Set-Output $out
     Set-Status "OK" ([System.Drawing.Color]::DarkGreen)
@@ -1394,22 +1423,39 @@ function Exec-Chkdsk {
     $output = ("Y" | & chkdsk @cdArgs 2>&1 | Out-String)
     $code = $LASTEXITCODE
 
-    # Veredito por codigo de saida (independe de idioma do Windows)
-    $verdict = switch ($code) {
-        0 { 'OK - Sem erros no sistema de arquivos' }
-        1 { 'OK - Erros encontrados e CORRIGIDOS' }
-        2 { '! Ha verificacao/limpeza pendente - rode com /f (ou agende)' }
-        3 { '! Nao deu pra verificar agora - sera agendado no proximo boot' }
-        default { "concluido (codigo $code)" }
+    # Sistema de arquivos via exit code (independe de idioma)
+    $fsTxt = switch ($code) {
+        0 { 'sem erros (saudavel)' }
+        1 { 'erros encontrados e CORRIGIDOS' }
+        2 { 'verificacao pendente - rode com /f (ou agende)' }
+        3 { 'nao verificado - sera agendado no proximo boot' }
+        default { "codigo $code" }
     }
 
+    # Setores defeituosos: le o numero de KB na linha "defe..."/"bad sector" (PT/ES/EN)
+    $badKB = $null
+    foreach ($line in ($output -split "`n")) {
+        if ($line -imatch 'defe|bad sector') {
+            $m = [regex]::Match($line, '([\d.,]+)\s*KB')
+            if ($m.Success) { $badKB = [int64]($m.Groups[1].Value -replace '[.,]', ''); break }
+        }
+    }
+    $badTxt = if ($null -eq $badKB) { 'N/D' }
+              elseif ($badKB -gt 0)  { "$badKB KB - PERIGO: falha fisica, faca BACKUP" }
+              else                   { '0 (nenhum - sem falha fisica)' }
+
+    $risco = (($null -ne $badKB) -and ($badKB -gt 0)) -or ($code -ge 2)
+    $ver = if ($risco) { 'ATENCAO - ver detalhes / backup' }
+           elseif ($code -le 1) { 'OK - nada a fazer' }
+           else { 'verificar' }
+
     $out  = "=== CHKDSK - $L`: ===`n`n"
-    $out += "Comando   : chkdsk $($cdArgs -join ' ')`n"
-    $out += "Resultado : $verdict`n`n"
-    $out += "PERIGO: se a saida abaixo mostrar KB em setores defeituosos (bad sectors) > 0,`n"
-    $out += "isso e FALHA FISICA do disco - faca backup ja. Confira tambem na tela S.M.A.R.T.`n"
-    $out += "(setores realocados / pendentes).`n`n"
-    $out += "--- saida completa ---`n"
+    $out += ">> Interpretacao (resumo):`n"
+    $out += "   Sistema de arquivos : $fsTxt`n"
+    $out += "   Setores defeituosos : $badTxt`n"
+    $out += "   VEREDITO            : $ver`n"
+    $out += "`n(comando: chkdsk $($cdArgs -join ' '))`n"
+    $out += "`n--- saida completa (copie pra uma IA se quiser interpretar) ---`n"
     $out += $output
     Set-Output $out
     Set-Status "CHKDSK $L`: concluido (codigo $code)" ([System.Drawing.Color]::DarkGreen)
