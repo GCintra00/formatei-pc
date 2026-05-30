@@ -807,12 +807,35 @@ function Get-SmartCtl {
 function Get-SmartViaCtl($diskNum) {
     $exe = Get-SmartCtl
     if (-not $exe) { return $null }
-    try {
-        $dev = "\\.\PhysicalDrive$diskNum"
-        $txt = & $exe -j -x -d auto $dev 2>$null | Out-String
-        if (-not $txt -or -not $txt.Trim()) { return $null }
-        $o = $txt | ConvertFrom-Json -ErrorAction Stop
-    } catch { return $null }
+
+    $dev    = "\\.\PhysicalDrive$diskNum"
+    $letter = [char]([int][char]'a' + $diskNum)
+    # smartctl no Windows aceita varias formas; tentamos ate uma trazer dados.
+    $tries = @(
+        @('-j','-x','-d','auto',$dev),
+        @('-j','-x',$dev),
+        @('-j','-x','-d','sat',$dev),
+        @('-j','-x','-d','nvme',$dev),
+        @('-j','-x',"/dev/sd$letter")
+    )
+    $hasData = { param($c) [bool]($c.model_name -or $c.nvme_smart_health_information_log -or ($c.ata_smart_attributes -and $c.ata_smart_attributes.table) -or ($c.power_on_time -and $c.power_on_time.hours)) }
+    $o = $null
+    foreach ($t in $tries) {
+        try {
+            $txt = & $exe @t 2>$null | Out-String
+            if (-not $txt -or -not $txt.Trim()) { continue }
+            $cand = $txt | ConvertFrom-Json -ErrorAction Stop
+        } catch { continue }
+        if (& $hasData $cand) { $o = $cand; break }
+        if (-not $o) { $o = $cand }   # guarda o 1o JSON p/ extrair msg de erro
+    }
+    if (-not $o) { return $null }
+
+    if (-not (& $hasData $o)) {
+        # smartctl rodou mas nao leu o disco -> deixa o WMI assumir; guarda o motivo
+        $script:lastSmartctlMsg = (($o.smartctl.messages | ForEach-Object { $_.string }) -join '; ')
+        return $null
+    }
 
     $r = @{ Source='smartctl'; Model=$o.model_name; Serial=$o.serial_number; Verdict=$null;
             PowerOnHours=$null; Temp=$null; TempMax=$null; Realloc=$null; Pending=$null;
@@ -892,6 +915,7 @@ function Exec-Smart {
     $disk    = Get-PhysicalDisk | Where-Object { $_.DeviceId -eq $diskNum }
     Set-Status "Lendo SMART..." ([System.Drawing.Color]::DarkOrange)
 
+    $script:lastSmartctlMsg = $null
     $d = Get-SmartViaCtl $diskNum
     if (-not $d) { $d = Get-SmartViaWmi $diskNum $disk }
 
@@ -932,7 +956,10 @@ function Exec-Smart {
 
     $out += "`nFonte: $($d.Source)"
     if ($d.Note) { $out += " ($($d.Note))" }
-    if ($d.Source -eq 'wmi') { $out += "`n(WMI nativo - dados limitados. Instale o smartctl p/ SMART completo, inclusive NVMe.)" }
+    if ($d.Source -eq 'wmi') {
+        $out += "`n(WMI nativo - dados limitados.)"
+        if ($script:lastSmartctlMsg) { $out += "`nsmartctl rodou mas nao leu o disco: $($script:lastSmartctlMsg)" }
+    }
 
     Set-Output $out
     Set-Status "OK" ([System.Drawing.Color]::DarkGreen)
