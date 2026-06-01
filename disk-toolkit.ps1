@@ -822,8 +822,9 @@ function Build-Panel($actionId) {
             $script:ctx.output = Add-Multiline 10 85 460 185
         }
         'netdiag' {
-            Add-Label 10 10 460 24 "Clique Executar pra diagnosticar a conexao (so leitura)." $true
-            $script:ctx.output = Add-Multiline 10 40 460 230
+            Add-Label 10 8 460 22 "Clique Executar pra diagnosticar a conexao (so leitura)." $true
+            $script:ctx.speedtest = Add-Checkbox 10 32 460 "Incluir teste de velocidade (baixa ~20 MB do Cloudflare)" $true
+            $script:ctx.output = Add-Multiline 10 58 460 212
         }
         'netopt' {
             Add-Label 10 8 460 22 "Ajustes seguros (clique Executar pra aplicar os marcados):" $true
@@ -1346,6 +1347,13 @@ function Exec-NetDiag {
     $sig    = if ($sigStr) { [int]($sigStr -replace '\D', '') } else { $null }
     $band   = & $pick 'banda|^band'
     $radio  = & $pick 'r.dio|radio type'
+    $chan   = & $pick 'canal|channel'
+    # muitas placas (ex: AX210) nao imprimem "Banda" no netsh -> deduz do canal
+    if (-not $band -and $chan) {
+        $cn = [int]("$chan" -replace '\D', '')
+        if ($cn -ge 1 -and $cn -le 14)        { $band = '2.4 GHz (deduzido do canal)' }
+        elseif ($cn -ge 32 -and $cn -le 177)  { $band = '5 GHz (deduzido do canal)' }
+    }
 
     $gw = (Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object { $_.IPv4DefaultGateway } | Select-Object -First 1).IPv4DefaultGateway.NextHop
 
@@ -1360,6 +1368,30 @@ function Exec-NetDiag {
     $gwP  = if ($gw) { & $pingStat $gw 8 } else { $null }
     $netP = & $pingStat '8.8.8.8' 8
 
+    # Teste de velocidade de download (throughput real, opcional)
+    $dl = $null
+    if ($script:ctx.speedtest -and $script:ctx.speedtest.Checked) {
+        Set-Status "Medindo velocidade de download (~20 MB)..." ([System.Drawing.Color]::DarkOrange)
+        try {
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            $tmp = "$env:TEMP\ign_spdtest.bin"
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            Invoke-WebRequest -Uri 'https://speed.cloudflare.com/__down?bytes=20000000' -OutFile $tmp -UseBasicParsing -ErrorAction Stop
+            $sw.Stop()
+            $secs = $sw.Elapsed.TotalSeconds
+            $sizeMB = (Get-Item $tmp).Length / 1MB
+            if ($secs -gt 0) { $dl = [math]::Round(($sizeMB * 8) / $secs, 1) }
+            Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+        } catch { $dl = $null }
+    }
+    $dlQual = if ($null -eq $dl) { '' }
+              elseif ($dl -ge 100) { '(excelente)' }
+              elseif ($dl -ge 50)  { '(bom)' }
+              elseif ($dl -ge 20)  { '(ok)' }
+              elseif ($dl -ge 5)   { '(lento p/ varios dispositivos)' }
+              else                 { '(muito lento)' }
+    $dlTxt = if ($null -ne $dl) { "$dl Mbps $dlQual" } else { 'nao testado / falhou' }
+
     # Alertas e veredito
     $problemas = @()
     if ($isWifi -and ($null -ne $sig) -and ($sig -lt 60)) { $problemas += "sinal WiFi fraco ($sig%)" }
@@ -1371,6 +1403,8 @@ function Exec-NetDiag {
         $culpa = "WiFi/PC - o link ate o roteador ja esta ruim (sinal/placa/driver)."
     } elseif ($netBad) {
         $culpa = "ROTEADOR ou PROVEDOR - o roteador responde bem, mas a internet esta ruim. Nao e o seu PC."
+    } elseif (($null -ne $dl) -and ($dl -lt 10)) {
+        $culpa = "BANDA/PROVEDOR - latencia boa, mas download baixo ($dl Mbps). O gargalo e a internet/plano, nao o seu PC."
     } else {
         $culpa = "Conexao saudavel - latencia e perda dentro do normal."
     }
@@ -1391,6 +1425,7 @@ function Exec-NetDiag {
     }
     $out += "   Ping roteador: $gwTxt`n"
     $out += "   Ping internet: $netTxt`n"
+    $out += "   Download     : $dlTxt`n"
     if ($problemas.Count -gt 0) { $out += "   Alertas      : " + ($problemas -join '; ') + "`n" }
     $out += "   VEREDITO     : $culpa`n"
     $out += "`n--- detalhes (copie pra uma IA se quiser interpretar) ---`n"
