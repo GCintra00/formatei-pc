@@ -279,7 +279,11 @@ $script:actions = @(
     @{Id='listshares'; Name='Cortar compartilhamento de rede'; Cat='REDE'; Desc='Lista todos os compartilhamentos SMB ativos no PC (ocultos C$/ADMIN$ ja filtrados). Selecione um e clique Executar pra remove-lo. Nao apaga a pasta nem o usuario, so para de compartilhar.'},
 
     # === SISTEMA ===
-    @{Id='activate'; Name='Ativar Windows (licenca da placa-mae)'; Cat='SISTEMA'; Desc='Le a chave OEM gravada no firmware da placa-mae (tabela MSDM) - a licenca que JA veio comprada com o PC - e mostra o status de ativacao, o tipo de licenca (OEM/Retail/Volume/KMS) e a validade (OEM/Retail = permanente, sem expiracao). Marque "Forcar reativacao" pra instalar a chave OEM e reativar (util apos reinstalar o Windows). Nao funciona em placa sem licenca embutida (avisa).'}
+    @{Id='activate'; Name='Ativar Windows (licenca da placa-mae)'; Cat='SISTEMA'; Desc='Le a chave OEM gravada no firmware da placa-mae (tabela MSDM) - a licenca que JA veio comprada com o PC - e mostra o status de ativacao, o tipo de licenca (OEM/Retail/Volume/KMS) e a validade (OEM/Retail = permanente, sem expiracao). Marque "Forcar reativacao" pra instalar a chave OEM e reativar (util apos reinstalar o Windows). Nao funciona em placa sem licenca embutida (avisa).'},
+
+    # === INTERNET/WIFI ===
+    @{Id='netdiag'; Name='Diagnostico de conexao (WiFi + ping)'; Cat='INTERNET/WIFI'; Desc='So leitura, nao muda nada. Mede sinal WiFi, banda e taxa, e faz ping no roteador e na internet pra dizer DE QUEM e a lentidao: do seu PC/WiFi, do roteador ou do provedor. Resumo no topo, detalhes embaixo.'},
+    @{Id='netopt'; Name='Otimizar rede (placa WiFi + DNS)'; Cat='INTERNET/WIFI'; Desc='Aplica ajustes SEGUROS do lado do PC: desliga a economia de energia da placa WiFi (causa lentidao/quedas) e limpa o cache DNS. Opcional: definir DNS rapido (8.8.8.8/1.1.1.1) - NAO use em PC corporativo com DNS interno. Nao mexe em TCP/winsock (mito/arriscado).'}
 )
 
 # ============= UI =============
@@ -817,6 +821,17 @@ function Build-Panel($actionId) {
             $script:ctx.reactivate = Add-Checkbox 10 56 460 "Forcar reativacao (instala a chave OEM e ativa)" $false
             $script:ctx.output = Add-Multiline 10 85 460 185
         }
+        'netdiag' {
+            Add-Label 10 10 460 24 "Clique Executar pra diagnosticar a conexao (so leitura)." $true
+            $script:ctx.output = Add-Multiline 10 40 460 230
+        }
+        'netopt' {
+            Add-Label 10 8 460 22 "Ajustes seguros (clique Executar pra aplicar os marcados):" $true
+            $script:ctx.optPower    = Add-Checkbox 10 34 460 "Desligar economia de energia da placa WiFi" $true
+            $script:ctx.optDnsFlush = Add-Checkbox 10 57 460 "Limpar cache DNS" $true
+            $script:ctx.optDnsSet   = Add-Checkbox 10 80 460 "Definir DNS rapido 8.8.8.8/1.1.1.1 (NAO em PC corporativo)" $false
+            $script:ctx.output = Add-Multiline 10 108 460 162
+        }
     }
 }
 
@@ -871,6 +886,8 @@ function Execute-Action($id) {
             'info'       { Exec-Info }
             'overview'   { Populate-Overview }
             'activate'   { Exec-Activate }
+            'netdiag'    { Exec-NetDiag }
+            'netopt'     { Exec-NetOpt }
             'wipe'       { Exec-Wipe }
             'label'      { Exec-Label }
             'letter'     { Exec-Letter }
@@ -1308,6 +1325,113 @@ function Exec-Activate {
 
     Set-Output $out
     Set-Status "Ativacao: verificado" ([System.Drawing.Color]::DarkGreen)
+}
+
+# --- INTERNET/WIFI ---
+function Exec-NetDiag {
+    Set-Status "Diagnosticando rede..." ([System.Drawing.Color]::DarkOrange)
+
+    $up = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' -and $_.HardwareInterface } | Select-Object -First 1
+    $isWifi = $false
+    if ($up) { $isWifi = ($up.PhysicalMediaType -like '*802.11*') -or ($up.InterfaceDescription -match 'Wi-?Fi|Wireless') }
+
+    # Detalhes WiFi via netsh (key : value), tolerante a idioma
+    $wlanRaw = (netsh wlan show interfaces 2>$null | Out-String)
+    $kv = @{}
+    foreach ($line in ($wlanRaw -split "`n")) {
+        if ($line -match '^\s*([^:]+?)\s*:\s*(.+?)\s*$') { $kv[$matches[1].Trim()] = $matches[2].Trim() }
+    }
+    $pick = { param($rx) foreach ($k in $kv.Keys) { if ($k -imatch $rx) { return $kv[$k] } } return $null }
+    $sigStr = & $pick 'sinal|signal'
+    $sig    = if ($sigStr) { [int]($sigStr -replace '\D', '') } else { $null }
+    $band   = & $pick 'banda|^band'
+    $radio  = & $pick 'r.dio|radio type'
+
+    $gw = (Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object { $_.IPv4DefaultGateway } | Select-Object -First 1).IPv4DefaultGateway.NextHop
+
+    $pingStat = {
+        param($target, $count)
+        $r = Test-Connection -ComputerName $target -Count $count -ErrorAction SilentlyContinue
+        $ok = @($r).Count
+        $loss = $count - $ok
+        $avg = if ($ok -gt 0) { [math]::Round((@($r) | Measure-Object ResponseTime -Average).Average) } else { $null }
+        return @{ LossPct = [math]::Round(100 * $loss / $count); Avg = $avg; Ok = $ok }
+    }
+    $gwP  = if ($gw) { & $pingStat $gw 8 } else { $null }
+    $netP = & $pingStat '8.8.8.8' 8
+
+    # Alertas e veredito
+    $problemas = @()
+    if ($isWifi -and ($null -ne $sig) -and ($sig -lt 60)) { $problemas += "sinal WiFi fraco ($sig%)" }
+    if ($isWifi -and ($band -match '2[.,]?4')) { $problemas += "rede 2.4 GHz (lenta/congestionada - prefira 5 GHz)" }
+
+    $gwBad  = $gwP -and (($gwP.LossPct -ge 10) -or (($null -ne $gwP.Avg) -and ($gwP.Avg -gt 30)))
+    $netBad = ($netP.Ok -eq 0) -or ($netP.LossPct -ge 10) -or (($null -ne $netP.Avg) -and ($netP.Avg -gt 80))
+    if ($gwBad) {
+        $culpa = "WiFi/PC - o link ate o roteador ja esta ruim (sinal/placa/driver)."
+    } elseif ($netBad) {
+        $culpa = "ROTEADOR ou PROVEDOR - o roteador responde bem, mas a internet esta ruim. Nao e o seu PC."
+    } else {
+        $culpa = "Conexao saudavel - latencia e perda dentro do normal."
+    }
+
+    $tipoConn = if ($isWifi) { 'WiFi' } else { 'cabeada' }
+    $adapTxt  = if ($up) { "$($up.Name) ($tipoConn)" } else { 'nenhum ativo' }
+    $sigQual  = if ($null -eq $sig) { '' } elseif ($sig -ge 75) { '(bom)' } elseif ($sig -ge 60) { '(ok)' } else { '(fraco)' }
+    $sigTxt   = if ($null -ne $sig) { "$sig% $sigQual" } else { 'N/D' }
+    $gwTxt    = if ($gwP) { "$($gwP.Avg) ms, perda $($gwP.LossPct)%" } else { 'N/D' }
+    $netTxt   = if ($netP.Ok -gt 0) { "$($netP.Avg) ms, perda $($netP.LossPct)%" } else { 'sem resposta' }
+
+    $out  = "=== Diagnostico de rede ===`n`n"
+    $out += ">> Interpretacao (resumo):`n"
+    $out += "   Adaptador    : $adapTxt`n"
+    if ($isWifi) {
+        $out += "   Sinal WiFi   : $sigTxt`n"
+        $out += "   Banda/radio  : $(Fmt-Val $band) / $(Fmt-Val $radio)`n"
+    }
+    $out += "   Ping roteador: $gwTxt`n"
+    $out += "   Ping internet: $netTxt`n"
+    if ($problemas.Count -gt 0) { $out += "   Alertas      : " + ($problemas -join '; ') + "`n" }
+    $out += "   VEREDITO     : $culpa`n"
+    $out += "`n--- detalhes (copie pra uma IA se quiser interpretar) ---`n"
+    $out += $wlanRaw
+
+    Set-Output $out
+    Set-Status "Diagnostico de rede concluido" ([System.Drawing.Color]::DarkGreen)
+}
+
+function Exec-NetOpt {
+    $did = @()
+    if ($script:ctx.optPower.Checked) {
+        $n = 0
+        Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.PhysicalMediaType -like '*802.11*' } | ForEach-Object {
+            try {
+                $pm = Get-NetAdapterPowerManagement -Name $_.Name -ErrorAction Stop
+                $pm.AllowComputerToTurnOffDevice = 'Disabled'
+                $pm | Set-NetAdapterPowerManagement -ErrorAction Stop
+                $n++
+            } catch {}
+        }
+        $did += "Economia de energia desligada em $n placa(s) WiFi"
+    }
+    if ($script:ctx.optDnsFlush.Checked) {
+        Clear-DnsClientCache -ErrorAction SilentlyContinue
+        $did += "Cache DNS limpo"
+    }
+    if ($script:ctx.optDnsSet.Checked) {
+        if (Confirm-Action "Definir DNS 8.8.8.8 / 1.1.1.1 nos adaptadores ativos?`n`nNAO use em PC corporativo com DNS interno (pode quebrar acesso a sistemas da empresa).") {
+            Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
+                Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ('8.8.8.8', '1.1.1.1') -ErrorAction SilentlyContinue
+            }
+            $did += "DNS definido para 8.8.8.8 / 1.1.1.1"
+        }
+    }
+
+    $out  = "=== Otimizacao de rede ===`n`n>> O que foi feito:`n"
+    if ($did.Count -gt 0) { foreach ($x in $did) { $out += "   - $x`n" } } else { $out += "   (nada marcado)`n" }
+    $out += "`nDica: rode o 'Diagnostico de conexao' de novo pra comparar."
+    Set-Output $out
+    Set-Status "Otimizacao de rede concluida" ([System.Drawing.Color]::DarkGreen)
 }
 
 # --- PARTICAO ---
