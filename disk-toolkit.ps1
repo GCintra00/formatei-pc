@@ -280,6 +280,7 @@ $script:actions = @(
 
     # === SISTEMA ===
     @{Id='activate'; Name='Ativar Windows (licenca da placa-mae)'; Cat='SISTEMA'; Desc='Le a chave OEM gravada no firmware da placa-mae (tabela MSDM) - a licenca que JA veio comprada com o PC - e mostra o status de ativacao, o tipo de licenca (OEM/Retail/Volume/KMS) e a validade (OEM/Retail = permanente, sem expiracao). Marque "Forcar reativacao" pra instalar a chave OEM e reativar (util apos reinstalar o Windows). Nao funciona em placa sem licenca embutida (avisa).'},
+    @{Id='repairboot'; Name='Reparar Boot / Sistema (DISM + SFC)'; Cat='SISTEMA'; Desc='Reparo ONLINE (com o Windows aberto): roda DISM /RestoreHealth (conserta a imagem do sistema, a "fonte" que o SFC usa) e depois SFC /scannow (conserta arquivos protegidos do Windows), le e resume o SrtTrail.txt (o log da tela "nao foi possivel reparar"), e SALVA um arquivo .log no Desktop com o RESULTADO DO SFC na primeira linha e o que ainda falta fazer. Nao roda bootrec/bcdboot (esses so funcionam no WinRE) - mas o log te diz se precisa ir pra la. Envie o .log gerado se precisar de ajuda.'},
 
     # === INTERNET/WIFI ===
     @{Id='netdiag'; Name='Diagnostico de conexao (WiFi + ping)'; Cat='INTERNET/WIFI'; Desc='So leitura, nao muda nada. Mede sinal WiFi, banda e taxa, e faz ping no roteador e na internet pra dizer DE QUEM e a lentidao: do seu PC/WiFi, do roteador ou do provedor. Resumo no topo, detalhes embaixo.'},
@@ -612,6 +613,28 @@ function Build-Panel($actionId) {
 
             $script:ctx.output = Add-Multiline 10 164 460 106
         }
+        'repairboot' {
+            Add-Label 10 8 460 40 "Reparo ONLINE: DISM (repara a imagem) + SFC (repara arquivos), le o SrtTrail e salva um .log no Desktop pra voce enviar." $true
+            $script:ctx.dism = Add-Checkbox 10 52 460 "Rodar DISM RestoreHealth (repara a imagem - precisa internet)" $true
+            $script:ctx.sfc  = Add-Checkbox 10 74 460 "Rodar SFC /scannow (repara arquivos do sistema)" $true
+            $script:ctx.srt  = Add-Checkbox 10 96 460 "Ler e resumir o SrtTrail.txt (causa da tela azul)" $true
+            Add-Label 10 120 460 26 "Pode levar varios minutos. A janela pode parecer travada enquanto roda - e normal."
+
+            $btnOpenLog = New-Object System.Windows.Forms.Button
+            $btnOpenLog.Text = "Abrir pasta do log"
+            $btnOpenLog.Location = New-Object System.Drawing.Point(10, 148)
+            $btnOpenLog.Size = New-Object System.Drawing.Size(160, 26)
+            $btnOpenLog.Add_Click({
+                if ($script:lastRepairLog -and (Test-Path $script:lastRepairLog)) {
+                    Start-Process explorer.exe -ArgumentList "/select,`"$($script:lastRepairLog)`""
+                } else {
+                    Show-Msg "Rode o reparo primeiro - o log ainda nao foi gerado." "Log" "Information"
+                }
+            })
+            $paramPanel.Controls.Add($btnOpenLog)
+
+            $script:ctx.output = Add-Multiline 10 180 460 90
+        }
         'defrag' {
             Add-Label 10 10 200 22 "Selecione o volume:" $true
             $script:ctx.vol = Add-Combo 10 35 460 (Get-VolumeDropdownItems)
@@ -895,6 +918,7 @@ function Execute-Action($id) {
             'resize'     { Exec-Resize }
             'format'     { Exec-Format }
             'chkdsk'     { Exec-Chkdsk }
+            'repairboot' { Exec-RepairBoot }
             'defrag'     { Exec-Defrag }
             'wipefree'   { Exec-WipeFree }
             'backupuser' { Exec-BackupUser }
@@ -1567,6 +1591,136 @@ function Cancel-ChkdskSchedule {
     $txt = (cmd /c "chkntfs /x $($sel.Letter):" 2>&1 | Out-String).Trim()
     Set-Output ("=== Cancelar agendamento - $($sel.Letter): ===`n`nComando: chkntfs /x $($sel.Letter):`n$txt`n`nAgendamento cancelado (se existia).")
     Set-Status "Agendamento cancelado ($($sel.Letter):)" ([System.Drawing.Color]::DarkGreen)
+}
+
+function Get-SrtTrailSummary {
+    # Le o log do Reparo de Inicializacao e tenta extrair a causa raiz (PT/ES/EN)
+    $path = Join-Path $env:SystemRoot 'System32\Logfiles\Srt\SrtTrail.txt'
+    if (-not (Test-Path $path)) { return $null }
+    try { $raw = Get-Content $path -Raw -ErrorAction Stop } catch { return $null }
+    $lines = $raw -split "`r?`n"
+    $cause = $null
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -imatch 'root cause|causa raiz|causa principal') {
+            for ($j = $i + 1; $j -lt [Math]::Min($i + 6, $lines.Count); $j++) {
+                $t = $lines[$j].Trim()
+                if ($t -and $t -notmatch '^[-=]+$') { $cause = $t; break }
+            }
+            break
+        }
+    }
+    $tail = ($lines | Select-Object -Last 30) -join "`r`n"
+    return @{ Path = $path; Cause = $cause; Tail = $tail }
+}
+
+function Exec-RepairBoot {
+    # Reparo ONLINE do sistema (Windows aberto): DISM + SFC + leitura do SrtTrail.
+    # Gera um .log no Desktop cuja PRIMEIRA LINHA e o resultado do SFC + o que falta.
+    $doDism = if ($script:ctx.dism) { $script:ctx.dism.Checked } else { $true }
+    $doSfc  = if ($script:ctx.sfc)  { $script:ctx.sfc.Checked }  else { $true }
+    $doSrt  = if ($script:ctx.srt)  { $script:ctx.srt.Checked }  else { $true }
+
+    $det = ""                       # saida completa (detalhes)
+    $sfcResult   = 'N/D'
+    $nextStep    = ''
+    $dismVerdict = 'nao executado'
+
+    # ---- DISM (CheckHealth rapido + RestoreHealth conserta) ----
+    if ($doDism) {
+        $det += "===== DISM (integridade da imagem) =====`n`n"
+        foreach ($stage in @('CheckHealth','RestoreHealth')) {
+            Set-Status "DISM /$stage (pode demorar, nao feche)..." ([System.Drawing.Color]::DarkOrange)
+            $out  = (& dism.exe /Online /Cleanup-Image /$stage 2>&1 | Out-String)
+            $code = $LASTEXITCODE
+            $det += ">> DISM /$stage  (exit $code)`n$($out.Trim())`n`n"
+            if ($stage -eq 'RestoreHealth') {
+                $dismVerdict = switch ($code) {
+                    0       { 'imagem OK / restaurada com sucesso' }
+                    3010    { 'restaurada (requer reiniciar)' }
+                    default { "ERRO (exit $code) - sem internet? use fonte install.wim (/Source)" }
+                }
+            }
+        }
+    } else {
+        $det += "===== DISM ===== (pulado pelo usuario)`n`n"
+    }
+
+    # ---- SFC ----
+    if ($doSfc) {
+        Set-Status "SFC /scannow (varios minutos, nao feche)..." ([System.Drawing.Color]::DarkOrange)
+        $sfcOut   = (& sfc.exe /scannow 2>&1 | Out-String)
+        $sfcClean = ($sfcOut -replace "`0", "").Trim()   # sfc redirecionado vem com NUL entre chars
+        $det += "===== SFC /scannow =====`n$sfcClean`n`n"
+
+        # Veredito por texto (multi-idioma PT/ES/EN). Ordem importa: checar falhas antes de sucesso.
+        if ($sfcClean -imatch 'unable to fix|n[aã]o conseguiu corrigir|no pudo reparar') {
+            $sfcResult = 'ACHOU corrompidos e NAO corrigiu todos'
+            $nextStep  = 'FALTA: rodar OFFLINE no WinRE -> sfc /scannow /offbootdir=C:\ /offwindir=C:\Windows (e DISM /Image). Me envie o log.'
+        } elseif ($sfcClean -imatch 'could not perform|n[aã]o p[oô]de executar|no pudo realizar') {
+            $sfcResult = 'SFC NAO RODOU (operacao pendente)'
+            $nextStep  = 'FALTA: reiniciar e rodar de novo; se insistir, rodar OFFLINE no WinRE.'
+        } elseif ($sfcClean -imatch 'successfully repaired|repaired them|os reparou|reparou|repar[oó]') {
+            $sfcResult = 'ACHOU corrompidos e REPAROU com exito'
+            $nextStep  = 'PROXIMO: reiniciar e testar o boot. Se ainda falhar -> WinRE (bootrec / bcdboot).'
+        } elseif ($sfcClean -imatch 'did not find|n[aã]o encontrou|no encontr[oó]') {
+            $sfcResult = 'NENHUMA violacao (arquivos do sistema OK)'
+            $nextStep  = 'PROXIMO: se ainda nao boota, o problema e o BCD/boot (nao os arquivos) -> WinRE: bootrec /rebuildbcd e bcdboot C:\Windows.'
+        } else {
+            $sfcResult = 'INDETERMINADO (ver saida completa)'
+            $nextStep  = 'Me envie este log pra eu interpretar.'
+        }
+    } else {
+        $sfcResult = 'SFC pulado pelo usuario'
+        $det += "===== SFC ===== (pulado)`n`n"
+    }
+
+    # ---- SrtTrail (causa da tela "nao foi possivel reparar") ----
+    if ($doSrt) {
+        $srt = Get-SrtTrailSummary
+        $det += "===== SrtTrail.txt (log do Reparo de Inicializacao) =====`n"
+        if ($srt) {
+            $det += "Arquivo: $($srt.Path)`n"
+            if ($srt.Cause) { $det += "CAUSA RAIZ detectada: $($srt.Cause)`n" }
+            $det += "--- ultimas linhas ---`n$($srt.Tail)`n"
+        } else {
+            $det += "(nao encontrado - o Reparo de Inicializacao pode nunca ter rodado, ou a letra do disco difere)`n"
+        }
+        $det += "`n"
+    }
+
+    # ---- monta o LOG: 1a linha = resultado SFC + o que falta ----
+    $head = "SFC: $sfcResult"
+    if ($nextStep) { $head += "  ||  $nextStep" }
+    $osCap = try { (Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).Caption } catch { 'N/D' }
+    $meta  = "DISM: $dismVerdict`n" +
+             "Quando: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  |  PC: $env:COMPUTERNAME  |  $osCap`n" +
+             ('=' * 72)
+    $logText = "$head`n$meta`n`n$det"
+
+    # ---- salva no Desktop pra enviar ----
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $deskDir = [Environment]::GetFolderPath('Desktop')
+    if (-not $deskDir -or -not (Test-Path $deskDir)) { $deskDir = $env:USERPROFILE }
+    $logPath = Join-Path $deskDir "reparo-boot-$stamp.log"
+    try {
+        $logText | Out-File -FilePath $logPath -Encoding UTF8 -ErrorAction Stop
+        $script:lastRepairLog = $logPath
+        $saveMsg = "Log salvo em: $logPath"
+    } catch {
+        $script:lastRepairLog = $null
+        $saveMsg = "NAO consegui salvar o log automaticamente: $($_.Exception.Message)"
+    }
+
+    # ---- tela ----
+    $screen  = "=== REPARO DE BOOT / SISTEMA (online) ===`n`n"
+    $screen += ">> RESULTADO SFC : $sfcResult`n"
+    $screen += ">> DISM          : $dismVerdict`n"
+    if ($nextStep) { $screen += ">> FALTA/PROXIMO : $nextStep`n" }
+    $screen += "`n$saveMsg`n"
+    $screen += "(use o botao 'Abrir pasta do log' e me envie esse arquivo)`n`n"
+    $screen += "--- conteudo do log ---`n$logText"
+    Set-Output $screen
+    Set-Status "Reparo concluido - $sfcResult" ([System.Drawing.Color]::DarkGreen)
 }
 
 function Exec-Chkdsk {

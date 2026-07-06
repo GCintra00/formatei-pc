@@ -112,7 +112,10 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 |  - VHDX C:      |                                     |
 |                 |                                     |
 | USUARIOS        |                                     |
-|  - Listar/Apagar|              [ EXECUTAR ACAO ]      |
+|  - Listar/Apagar|                                     |
+|                 |                                     |
+| SISTEMA         |                                     |
+|  - Reparar Boot |              [ EXECUTAR ACAO ]      |
 +-----------------+-------------------------------------+
 | status: aguardando...                                 |
 +-------------------------------------------------------+</div>
@@ -141,6 +144,7 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li><a href="#createuser">Criar novo usuario local</a></li>
 <li><a href="#share">Compartilhar pasta na rede (SMB)</a></li>
 <li><a href="#listshares">Listar compartilhamentos ativos</a></li>
+<li><a href="#repairboot">Reparar Boot / Sistema (DISM + SFC)</a></li>
 </ul>
 </div>
 
@@ -453,6 +457,29 @@ ACESSO DE OUTRAS MAQUINAS WINDOWS:
 <li>Tipo (FileSystemDirectory tipicamente)</li>
 </ul>
 <div class="info">Remover o share NAO apaga a pasta nem o usuario - so para de disponibilizar pela rede.</div>
+</div>
+
+<!-- ============================= -->
+<h2>8.7. SISTEMA <span class="tag tag-maint">reparo</span></h2>
+<!-- ============================= -->
+
+<div class="action-card" id="repairboot">
+<div class="action-title">Reparar Boot / Sistema (DISM + SFC) <span class="tag tag-safe">seguro</span></div>
+<p class="action-desc">Reparo <strong>ONLINE</strong> (com o Windows aberto): roda <code>DISM /Online /Cleanup-Image /RestoreHealth</code> e depois <code>sfc /scannow</code>, le e resume o <code>SrtTrail.txt</code> (o log da tela "seu dispositivo encontrou um problema e nao pode ser reparado"), e salva um <code>.log</code> no Desktop pra voce enviar.</p>
+<h4>O que faz, em ordem</h4>
+<ul class="action-fields">
+<li><strong>DISM (CheckHealth + RestoreHealth):</strong> conserta a IMAGEM do sistema - a "fonte" de onde o SFC puxa os arquivos bons. Por isso roda ANTES do SFC. Precisa de internet (baixa do Windows Update).</li>
+<li><strong>SFC /scannow:</strong> conserta os arquivos protegidos do Windows usando a imagem ja reparada pelo DISM.</li>
+<li><strong>SrtTrail.txt:</strong> extrai a CAUSA RAIZ que o Reparo de Inicializacao registrou.</li>
+</ul>
+<h4>Log gerado (Desktop)</h4>
+<ul class="action-fields">
+<li>Arquivo <code>reparo-boot-AAAAMMDD-HHMMSS.log</code>.</li>
+<li><strong>1a linha = resultado do SFC + o que ainda falta</strong> (ex.: "NENHUMA violacao... -&gt; se ainda nao boota, o problema e o BCD: ir pro WinRE").</li>
+<li>Veredito idioma-independente (PT/ES/EN), igual ao CHKDSK. Botao "Abrir pasta do log" localiza o arquivo.</li>
+</ul>
+<div class="info">Nao inclui <code>bootrec</code>/<code>bcdboot</code>: esses so funcionam no Ambiente de Recuperacao (WinRE), nao com o Windows aberto. Quando forem necessarios, o proprio log avisa e mostra os comandos.</div>
+<div class="aviso"><strong>DISM precisa de internet:</strong> em Win10 antigos com problema de TLS pode falhar - nesse caso desmarque o DISM e rode so o SFC, ou aponte uma fonte <code>install.wim</code>. O erro do DISM e registrado sem travar o resto.</div>
 </div>
 
 <!-- ============================= -->
