@@ -16,69 +16,6 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
-# ============= Senha de acesso =============
-# SHA-256 (hex) da senha. VAZIO ('') = SEM senha (acesso livre).
-# TROCAR senha: gere o hash desta linha (no PowerShell) e cole abaixo:
-#   $p='NovaSenha'; ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($p))) -replace '-','')
-# REMOVER senha: deixe as aspas vazias ('').
-# OBS: o script e publico no GitHub, entao isto e um FREIO contra uso casual,
-#      nao seguranca forte (o hash e visivel; senha fraca pode ser quebrada).
-$script:TOOLKIT_PWD_HASH = ''
-
-function Show-PwPrompt($promptText) {
-    $f = New-Object System.Windows.Forms.Form
-    $f.Text = "Disk Toolkit - Acesso"
-    $f.Size = New-Object System.Drawing.Size(340, 165)
-    $f.StartPosition = "CenterScreen"
-    $f.FormBorderStyle = "FixedDialog"; $f.MaximizeBox = $false; $f.MinimizeBox = $false
-    $f.TopMost = $true
-    $lbl = New-Object System.Windows.Forms.Label
-    $lbl.Text = $promptText
-    $lbl.Location = New-Object System.Drawing.Point(15, 15)
-    $lbl.Size = New-Object System.Drawing.Size(305, 20)
-    $f.Controls.Add($lbl)
-    $tb = New-Object System.Windows.Forms.TextBox
-    $tb.UseSystemPasswordChar = $true
-    $tb.Location = New-Object System.Drawing.Point(15, 40)
-    $tb.Size = New-Object System.Drawing.Size(305, 25)
-    $f.Controls.Add($tb)
-    $ok = New-Object System.Windows.Forms.Button
-    $ok.Text = "OK"; $ok.DialogResult = 'OK'
-    $ok.Location = New-Object System.Drawing.Point(150, 85); $ok.Size = New-Object System.Drawing.Size(80, 28)
-    $f.Controls.Add($ok); $f.AcceptButton = $ok
-    $cc = New-Object System.Windows.Forms.Button
-    $cc.Text = "Cancelar"; $cc.DialogResult = 'Cancel'
-    $cc.Location = New-Object System.Drawing.Point(240, 85); $cc.Size = New-Object System.Drawing.Size(80, 28)
-    $f.Controls.Add($cc); $f.CancelButton = $cc
-    $f.Add_Shown({ $tb.Focus() })
-    $res = $f.ShowDialog()
-    $val = $tb.Text
-    $f.Dispose()
-    if ($res -eq [System.Windows.Forms.DialogResult]::OK) { return $val } else { return $null }
-}
-
-function Get-Sha256Hex($text) {
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($text))
-    return (([BitConverter]::ToString($bytes)) -replace '-', '')
-}
-
-function Test-ToolkitPassword {
-    if ([string]::IsNullOrWhiteSpace($script:TOOLKIT_PWD_HASH)) { return $true }   # sem senha
-    for ($t = 1; $t -le 3; $t++) {
-        $pw = Show-PwPrompt "Senha de acesso (tentativa $t/3):"
-        if ($null -eq $pw) { return $false }                                       # cancelou
-        if ((Get-Sha256Hex $pw) -eq $script:TOOLKIT_PWD_HASH.ToUpper()) { return $true }
-        [System.Windows.Forms.MessageBox]::Show("Senha incorreta.", "Acesso negado", 'OK', 'Warning') | Out-Null
-    }
-    return $false
-}
-
-if (-not (Test-ToolkitPassword)) {
-    [System.Windows.Forms.MessageBox]::Show("Acesso negado. Encerrando.", "Disk Toolkit", 'OK', 'Error') | Out-Null
-    return
-}
-
 # ============= Estado global =============
 $script:currentAction = $null
 $script:disksCache = @()
