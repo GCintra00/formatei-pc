@@ -16,6 +16,69 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
+# ============= Senha de acesso =============
+# SHA-256 (hex) da senha. VAZIO ('') = SEM senha (acesso livre).
+# TROCAR senha: gere o hash desta linha (no PowerShell) e cole abaixo:
+#   $p='NovaSenha'; ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($p))) -replace '-','')
+# REMOVER senha: deixe as aspas vazias ('').
+# OBS: o script e publico no GitHub, entao isto e um FREIO contra uso casual,
+#      nao seguranca forte (o hash e visivel; senha fraca pode ser quebrada).
+$script:TOOLKIT_PWD_HASH = ''
+
+function Show-PwPrompt($promptText) {
+    $f = New-Object System.Windows.Forms.Form
+    $f.Text = "Disk Toolkit - Acesso"
+    $f.Size = New-Object System.Drawing.Size(340, 165)
+    $f.StartPosition = "CenterScreen"
+    $f.FormBorderStyle = "FixedDialog"; $f.MaximizeBox = $false; $f.MinimizeBox = $false
+    $f.TopMost = $true
+    $lbl = New-Object System.Windows.Forms.Label
+    $lbl.Text = $promptText
+    $lbl.Location = New-Object System.Drawing.Point(15, 15)
+    $lbl.Size = New-Object System.Drawing.Size(305, 20)
+    $f.Controls.Add($lbl)
+    $tb = New-Object System.Windows.Forms.TextBox
+    $tb.UseSystemPasswordChar = $true
+    $tb.Location = New-Object System.Drawing.Point(15, 40)
+    $tb.Size = New-Object System.Drawing.Size(305, 25)
+    $f.Controls.Add($tb)
+    $ok = New-Object System.Windows.Forms.Button
+    $ok.Text = "OK"; $ok.DialogResult = 'OK'
+    $ok.Location = New-Object System.Drawing.Point(150, 85); $ok.Size = New-Object System.Drawing.Size(80, 28)
+    $f.Controls.Add($ok); $f.AcceptButton = $ok
+    $cc = New-Object System.Windows.Forms.Button
+    $cc.Text = "Cancelar"; $cc.DialogResult = 'Cancel'
+    $cc.Location = New-Object System.Drawing.Point(240, 85); $cc.Size = New-Object System.Drawing.Size(80, 28)
+    $f.Controls.Add($cc); $f.CancelButton = $cc
+    $f.Add_Shown({ $tb.Focus() })
+    $res = $f.ShowDialog()
+    $val = $tb.Text
+    $f.Dispose()
+    if ($res -eq [System.Windows.Forms.DialogResult]::OK) { return $val } else { return $null }
+}
+
+function Get-Sha256Hex($text) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($text))
+    return (([BitConverter]::ToString($bytes)) -replace '-', '')
+}
+
+function Test-ToolkitPassword {
+    if ([string]::IsNullOrWhiteSpace($script:TOOLKIT_PWD_HASH)) { return $true }   # sem senha
+    for ($t = 1; $t -le 3; $t++) {
+        $pw = Show-PwPrompt "Senha de acesso (tentativa $t/3):"
+        if ($null -eq $pw) { return $false }                                       # cancelou
+        if ((Get-Sha256Hex $pw) -eq $script:TOOLKIT_PWD_HASH.ToUpper()) { return $true }
+        [System.Windows.Forms.MessageBox]::Show("Senha incorreta.", "Acesso negado", 'OK', 'Warning') | Out-Null
+    }
+    return $false
+}
+
+if (-not (Test-ToolkitPassword)) {
+    [System.Windows.Forms.MessageBox]::Show("Acesso negado. Encerrando.", "Disk Toolkit", 'OK', 'Error') | Out-Null
+    return
+}
+
 # ============= Estado global =============
 $script:currentAction = $null
 $script:disksCache = @()
@@ -1593,6 +1656,45 @@ function Cancel-ChkdskSchedule {
     Set-Status "Agendamento cancelado ($($sel.Letter):)" ([System.Drawing.Color]::DarkGreen)
 }
 
+function Invoke-StepProc($exe, $argList, $label, $stepNum, $stepTotal) {
+    # Roda dism/sfc mostrando progresso AO VIVO no rodape: "Passo X/N: <label> (NN% ou Xs)".
+    # Le a saida redirecionada em arquivo (sem travar a UI) e extrai a ultima % que aparecer.
+    # Se nao houver %, mostra os segundos decorridos como prova de que esta avancando.
+    $tmpOut = [System.IO.Path]::GetTempFileName()
+    $tmpErr = [System.IO.Path]::GetTempFileName()
+    try {
+        $proc = Start-Process -FilePath $exe -ArgumentList $argList -PassThru -NoNewWindow `
+                    -RedirectStandardOutput $tmpOut -RedirectStandardError $tmpErr
+    } catch {
+        Remove-Item $tmpOut, $tmpErr -Force -ErrorAction SilentlyContinue
+        return @{ Output = "ERRO ao iniciar $exe : $($_.Exception.Message)"; Code = -1 }
+    }
+    $start = Get-Date
+    while (-not $proc.HasExited) {
+        Start-Sleep -Milliseconds 700
+        $pct = $null
+        try {
+            $fs = [System.IO.File]::Open($tmpOut, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+            $sr = New-Object System.IO.StreamReader($fs)
+            $txt = ($sr.ReadToEnd() -replace "`0", "")
+            $sr.Close(); $fs.Close()
+            $mm = [regex]::Matches($txt, '(\d+(?:[.,]\d+)?)\s*%')
+            if ($mm.Count -gt 0) { $pct = $mm[$mm.Count - 1].Groups[1].Value }
+        } catch { }
+        $elapsed = [int]((Get-Date) - $start).TotalSeconds
+        $prog = if ($pct) { "$pct%" } else { "${elapsed}s" }
+        Set-Status "Passo $stepNum/$stepTotal: $label ($prog)" ([System.Drawing.Color]::DarkOrange)
+        [System.Windows.Forms.Application]::DoEvents()
+    }
+    $proc.WaitForExit()
+    $out = ''; $er = ''
+    try { $out = ([System.IO.File]::ReadAllText($tmpOut) -replace "`0", "") } catch { }
+    try { $er  = ([System.IO.File]::ReadAllText($tmpErr) -replace "`0", "") } catch { }
+    Remove-Item $tmpOut, $tmpErr -Force -ErrorAction SilentlyContinue
+    if ($er.Trim()) { $out = "$out`n[stderr]`n$er" }
+    return @{ Output = $out; Code = $proc.ExitCode }
+}
+
 function Get-SrtTrailSummary {
     # Le o log do Reparo de Inicializacao e tenta extrair a causa raiz (PT/ES/EN)
     $path = Join-Path $env:SystemRoot 'System32\Logfiles\Srt\SrtTrail.txt'
@@ -1625,19 +1727,28 @@ function Exec-RepairBoot {
     $nextStep    = ''
     $dismVerdict = 'nao executado'
 
+    # ---- monta a lista de passos (pra mostrar "Passo X/N" no rodape) ----
+    $dismStages = @('CheckHealth','RestoreHealth')
+    $steps = @()
+    if ($doDism) { foreach ($s in $dismStages) { $steps += "DISM /$s" } }
+    if ($doSfc)  { $steps += 'SFC /scannow' }
+    if ($doSrt)  { $steps += 'Ler SrtTrail.txt' }
+    $steps += 'Salvar log'
+    $total = $steps.Count
+    $stepN = 0
+
     # ---- DISM (CheckHealth rapido + RestoreHealth conserta) ----
     if ($doDism) {
         $det += "===== DISM (integridade da imagem) =====`n`n"
-        foreach ($stage in @('CheckHealth','RestoreHealth')) {
-            Set-Status "DISM /$stage (pode demorar, nao feche)..." ([System.Drawing.Color]::DarkOrange)
-            $out  = (& dism.exe /Online /Cleanup-Image /$stage 2>&1 | Out-String)
-            $code = $LASTEXITCODE
-            $det += ">> DISM /$stage  (exit $code)`n$($out.Trim())`n`n"
+        foreach ($stage in $dismStages) {
+            $stepN++
+            $r = Invoke-StepProc 'dism.exe' @('/Online','/Cleanup-Image',"/$stage") "DISM /$stage" $stepN $total
+            $det += ">> DISM /$stage  (exit $($r.Code))`n$($r.Output.Trim())`n`n"
             if ($stage -eq 'RestoreHealth') {
-                $dismVerdict = switch ($code) {
+                $dismVerdict = switch ($r.Code) {
                     0       { 'imagem OK / restaurada com sucesso' }
                     3010    { 'restaurada (requer reiniciar)' }
-                    default { "ERRO (exit $code) - sem internet? use fonte install.wim (/Source)" }
+                    default { "ERRO (exit $($r.Code)) - sem internet? use fonte install.wim (/Source)" }
                 }
             }
         }
@@ -1647,9 +1758,9 @@ function Exec-RepairBoot {
 
     # ---- SFC ----
     if ($doSfc) {
-        Set-Status "SFC /scannow (varios minutos, nao feche)..." ([System.Drawing.Color]::DarkOrange)
-        $sfcOut   = (& sfc.exe /scannow 2>&1 | Out-String)
-        $sfcClean = ($sfcOut -replace "`0", "").Trim()   # sfc redirecionado vem com NUL entre chars
+        $stepN++
+        $r = Invoke-StepProc 'sfc.exe' @('/scannow') 'SFC /scannow' $stepN $total
+        $sfcClean = ($r.Output -replace "`0", "").Trim()   # sfc redirecionado vem com NUL entre chars
         $det += "===== SFC /scannow =====`n$sfcClean`n`n"
 
         # Veredito por texto (multi-idioma PT/ES/EN). Ordem importa: checar falhas antes de sucesso.
@@ -1676,6 +1787,9 @@ function Exec-RepairBoot {
 
     # ---- SrtTrail (causa da tela "nao foi possivel reparar") ----
     if ($doSrt) {
+        $stepN++
+        Set-Status "Passo $stepN/$total: lendo SrtTrail.txt..." ([System.Drawing.Color]::DarkOrange)
+        [System.Windows.Forms.Application]::DoEvents()
         $srt = Get-SrtTrailSummary
         $det += "===== SrtTrail.txt (log do Reparo de Inicializacao) =====`n"
         if ($srt) {
@@ -1698,6 +1812,9 @@ function Exec-RepairBoot {
     $logText = "$head`n$meta`n`n$det"
 
     # ---- salva no Desktop pra enviar ----
+    $stepN++
+    Set-Status "Passo $stepN/$total: salvando log..." ([System.Drawing.Color]::DarkOrange)
+    [System.Windows.Forms.Application]::DoEvents()
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $deskDir = [Environment]::GetFolderPath('Desktop')
     if (-not $deskDir -or -not (Test-Path $deskDir)) { $deskDir = $env:USERPROFILE }
@@ -1720,7 +1837,7 @@ function Exec-RepairBoot {
     $screen += "(use o botao 'Abrir pasta do log' e me envie esse arquivo)`n`n"
     $screen += "--- conteudo do log ---`n$logText"
     Set-Output $screen
-    Set-Status "Reparo concluido - $sfcResult" ([System.Drawing.Color]::DarkGreen)
+    Set-Status "Reparo concluido ($stepN/$total) - $sfcResult" ([System.Drawing.Color]::DarkGreen)
 }
 
 function Exec-Chkdsk {
