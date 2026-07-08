@@ -1620,7 +1620,7 @@ function Invoke-StepProc($exe, $argList, $label, $stepNum, $stepTotal) {
         } catch { }
         $elapsed = [int]((Get-Date) - $start).TotalSeconds
         $prog = if ($pct) { "$pct%" } else { "${elapsed}s" }
-        Set-Status "Passo $stepNum/$stepTotal: $label ($prog)" ([System.Drawing.Color]::DarkOrange)
+        Set-Status "Passo $stepNum/${stepTotal}: $label ($prog)" ([System.Drawing.Color]::DarkOrange)
         [System.Windows.Forms.Application]::DoEvents()
     }
     $proc.WaitForExit()
@@ -1725,7 +1725,7 @@ function Exec-RepairBoot {
     # ---- SrtTrail (causa da tela "nao foi possivel reparar") ----
     if ($doSrt) {
         $stepN++
-        Set-Status "Passo $stepN/$total: lendo SrtTrail.txt..." ([System.Drawing.Color]::DarkOrange)
+        Set-Status "Passo $stepN/${total}: lendo SrtTrail.txt..." ([System.Drawing.Color]::DarkOrange)
         [System.Windows.Forms.Application]::DoEvents()
         $srt = Get-SrtTrailSummary
         $det += "===== SrtTrail.txt (log do Reparo de Inicializacao) =====`n"
@@ -1750,7 +1750,7 @@ function Exec-RepairBoot {
 
     # ---- salva no Desktop pra enviar ----
     $stepN++
-    Set-Status "Passo $stepN/$total: salvando log..." ([System.Drawing.Color]::DarkOrange)
+    Set-Status "Passo $stepN/${total}: salvando log..." ([System.Drawing.Color]::DarkOrange)
     [System.Windows.Forms.Application]::DoEvents()
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $deskDir = [Environment]::GetFolderPath('Desktop')
