@@ -261,6 +261,7 @@ $script:actions = @(
     @{Id='format'; Name='Formatar com escolha de FS'; Cat='PARTICAO'; Desc='ATENCAO: Apaga todos os dados da particao escolhida. Diferente do Wipe&Format, este só reformata uma particao especifica (não mexe nas outras). Permite escolher entre NTFS, exFAT, FAT32 ou ReFS.'},
 
     # === MANUTENCAO ===
+    @{Id='uti'; Name='UTI do Windows (limpeza + reparo profundo)'; Cat='MANUTENCAO'; Desc='Para PC travado/iniciando mal: mata todos os apps abertos (preserva acesso remoto), desintoxica a inicializacao (Steam etc, com backup no Desktop), limpa temp/caches/lixeira, cache do Windows Update, flush DNS + winsock reset, bateria DISM completa + SFC na ordem certa, chkdsk e defrag. Pergunta o modo na largada: watchdog (limite de tempo por etapa) ou log completo (pericia). Abre em janela propria elevada; REINICIAR o PC ao final. Roda direto do repo limpeza (GCintra00).'},
     @{Id='chkdsk'; Name='Checagem de integridade (CHKDSK)'; Cat='MANUTENCAO'; Desc='Roda CHKDSK pra verificar erros no sistema de arquivos da partição. Com o modo "Corrigir", tenta consertar erros encontrados e marcar setores defeituosos como inacessiveis. Recomenda agendar se o disco estiver em uso.'},
     @{Id='defrag'; Name='Desfragmentar / Otimizar'; Cat='MANUTENCAO'; Desc='Detecta automaticamente se o disco e HDD ou SSD. Em HDD: desfragmenta arquivos pra melhorar velocidade de leitura. Em SSD: roda TRIM (retorna celulas nao usadas pra controlador, mantem performance).'},
     @{Id='wipefree'; Name='Limpar espaco livre (impede recuperacao)'; Cat='MANUTENCAO'; Desc='Sobrescreve com zeros toda a area marcada como livre no disco. Arquivos que voce apagou antes mas que ainda existiam no disco (recuperaveis com software) deixam de existir. Util antes de doar/vender PC. Pode demorar bastante (1+ hora em discos grandes).'},
@@ -430,6 +431,7 @@ function Build-Panel($actionId) {
                 @{Name='Disk Toolkit'; Desc='esta ferramenta (re-executar)'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/disk-toolkit.ps1 | iex'},
                 @{Name='Preparar HDD Storage'; Desc='wipe + format NTFS focado'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/prepare-storage.ps1 | iex'},
                 @{Name='Limpeza do Sistema'; Desc='cache, cookies, temp'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/limpeza.ps1 | iex'},
+                @{Name='UTI do Windows v6'; Desc='PC travado: mata apps + startup + DISM/SFC + disco (respirando por maquinas)'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/uti-v6.ps1 | iex'},
                 @{Name='Corrigir DNS (Google 8.8.8.8)'; Desc='resolve DNS quebrado em PCs recem-formatados'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }'},
                 @{Name='Serial Number do PC'; Desc='mostra serial da BIOS (pra registro)'; Cmd='(Get-CimInstance Win32_BIOS).SerialNumber'},
                 @{Name='IP LAN da maquina'; Desc='mostra IP local'; Cmd='(Get-NetIPAddress -AddressFamily IPv4 | Where { $_.PrefixOrigin -in "Dhcp","Manual" -and $_.IPAddress -notlike "169.*" -and $_.IPAddress -notlike "127.*" } | Select -First 1).IPAddress'},
@@ -849,6 +851,10 @@ function Build-Panel($actionId) {
             $script:ctx.speedtest = Add-Checkbox 10 32 460 "Incluir teste de velocidade (baixa ~20 MB do Cloudflare)" $true
             $script:ctx.output = Add-Multiline 10 58 460 212
         }
+        'uti' {
+            Add-Label 10 10 460 44 "Abre a UTI do Windows numa janela PowerShell propria (elevada). La dentro ela pergunta o modo: [1] watchdog ou [2] log completo. Log e backups: Desktop\UTI-backup." $false
+            $script:ctx.output = Add-Multiline 10 60 460 210
+        }
         'netopt' {
             Add-Label 10 8 460 22 "Ajustes seguros (clique Executar pra aplicar os marcados):" $true
             $script:ctx.optPower    = Add-Checkbox 10 34 460 "Desligar economia de energia da placa WiFi" $true
@@ -918,6 +924,7 @@ function Execute-Action($id) {
             'resize'     { Exec-Resize }
             'format'     { Exec-Format }
             'chkdsk'     { Exec-Chkdsk }
+            'uti'        { Exec-Uti }
             'repairboot' { Exec-RepairBoot }
             'defrag'     { Exec-Defrag }
             'wipefree'   { Exec-WipeFree }
@@ -1457,6 +1464,15 @@ function Exec-NetDiag {
 
     Set-Output $out
     Set-Status "Diagnostico de rede concluido" ([System.Drawing.Color]::DarkGreen)
+}
+
+function Exec-Uti {
+    $cmd = 'irm https://raw.githubusercontent.com/GCintra00/limpeza/master/uti-v6.ps1 | iex'
+    Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',$cmd
+    Set-Output ("UTI aberta em janela propria (ela mesma se eleva pra admin se precisar).`n" +
+                "Acompanhe por la. Ao final: REINICIAR o PC.`n" +
+                "Log + backups da inicializacao: Desktop\UTI-backup")
+    Set-Status "UTI lancada em nova janela" ([System.Drawing.Color]::DarkGreen)
 }
 
 function Exec-NetOpt {
