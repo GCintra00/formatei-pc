@@ -273,6 +273,7 @@ $script:actions = @(
 
     # === USUARIOS ===
     @{Id='users'; Name='Listar e apagar perfis de usuario'; Cat='USUARIOS'; Desc='Lista todos os perfis locais do Windows com nome, tamanho ocupado em disco e ultimo login. Permite apagar perfis antigos (remove pasta C:\Users\xyz + conta + entrada no registro). Se o usuario escolhido estiver LOGADO, faz logoff forcado automaticamente antes de apagar. So bloqueia se voce tentar apagar sua propria conta (esta logada agora).'},
+    @{Id='renameuser'; Name='Renomear pasta de perfil (C:\Users\xyz)'; Cat='USUARIOS'; Desc='Troca o nome da pasta do perfil (ex: C:\Users\CintrAvell -> C:\Users\acamargo), que renomear a CONTA nunca muda. Voce escolhe o perfil na lista e digita o nome novo. Faz na ordem segura: renomeia a pasta primeiro e SO depois aponta o registro (ProfileImagePath) pra ela - se a pasta estiver travada, nada e gravado, evitando o perfil temporario. Opcional: renomear tambem a conta local e criar um atalho (junction) com o nome antigo pra nao quebrar app com caminho fixo. Rode por OUTRA conta admin, com o perfil alvo deslogado, e reinicie antes de logar nele.'},
     @{Id='createuser'; Name='Criar novo usuario local'; Cat='USUARIOS'; Desc='Cria uma conta LOCAL do Windows (sem vinculo com conta Microsoft) com nome de usuario e senha definidos por voce. Opcionalmente da privilegio de Administrador. Util pra criar conta tecnica em PCs em manutencao ou conta nova pra um colaborador.'},
 
     # === REDE ===
@@ -828,6 +829,64 @@ function Build-Panel($actionId) {
             $paramPanel.Controls.Add($script:ctx.profiles)
             Add-Label 10 240 460 30 "Selecione um perfil e clique Executar pra apagar."
         }
+        'renameuser' {
+            Add-Label 10 6 460 20 "Perfis locais do Windows:" $true
+            $script:ctx.profiles = New-Object System.Windows.Forms.ListView
+            $script:ctx.profiles.Location = New-Object System.Drawing.Point(10, 28)
+            $script:ctx.profiles.Size = New-Object System.Drawing.Size(460, 124)
+            $script:ctx.profiles.View = "Details"
+            $script:ctx.profiles.FullRowSelect = $true
+            $script:ctx.profiles.GridLines = $true
+            $script:ctx.profiles.Columns.Add("Pasta atual", 120) | Out-Null
+            $script:ctx.profiles.Columns.Add("Conta", 105) | Out-Null
+            $script:ctx.profiles.Columns.Add("Tamanho", 78) | Out-Null
+            $script:ctx.profiles.Columns.Add("Status", 132) | Out-Null
+
+            Get-CimInstance Win32_UserProfile | Where-Object { -not $_.Special } | ForEach-Object {
+                $regSid  = $_.SID
+                $regPath = $_.LocalPath
+                $folder  = Split-Path $regPath -Leaf
+                $onDisk  = Test-Path $regPath
+
+                # Conta local dona do SID (pode nao existir: perfil de conta ja apagada / de dominio)
+                $account = ""
+                try {
+                    $account = (Get-LocalUser -ErrorAction SilentlyContinue | Where-Object { $_.SID.Value -eq $regSid } | Select-Object -First 1).Name
+                } catch {}
+
+                $size = ""
+                try {
+                    if ($onDisk) {
+                        $bytes = (Get-ChildItem $regPath -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+                        if ($bytes) { $size = Format-Bytes $bytes }
+                    }
+                } catch {}
+
+                $status = if (-not $onDisk) { "INCONSISTENTE" } elseif ($_.Loaded) { "EM USO" } else { "Disponivel" }
+
+                $item = New-Object System.Windows.Forms.ListViewItem($folder)
+                $item.SubItems.Add($account) | Out-Null
+                $item.SubItems.Add($size) | Out-Null
+                $item.SubItems.Add($status) | Out-Null
+                $item.Tag = [PSCustomObject]@{
+                    Sid     = $regSid
+                    RegPath = $regPath
+                    OnDisk  = $onDisk
+                    Loaded  = [bool]$_.Loaded
+                    Account = $account
+                }
+                if ($_.Loaded)  { $item.ForeColor = [System.Drawing.Color]::Gray }
+                if (-not $onDisk) { $item.ForeColor = [System.Drawing.Color]::Firebrick }
+                $script:ctx.profiles.Items.Add($item) | Out-Null
+            }
+            $paramPanel.Controls.Add($script:ctx.profiles)
+
+            Add-Label 10 158 200 20 "Novo nome da pasta:" $true
+            $script:ctx.newname = Add-Textbox 10 178 190
+            $script:ctx.alsoAccount = Add-Checkbox 212 178 258 "Renomear tambem a conta local" $true
+            $script:ctx.junction = Add-Checkbox 10 202 460 "Criar atalho (junction) com o nome antigo - PC ja em uso" $false
+            Add-Label 10 226 460 44 "Rode por OUTRA conta admin, com o perfil alvo deslogado. REINICIE antes de logar no perfil renomeado. Linha vermelha = registro aponta pra pasta que nao existe."
+        }
         'overview' {
             Add-Label 10 10 460 22 "Todos os discos (clique Executar pra atualizar):" $true
             $script:ctx.overviewList = New-Object System.Windows.Forms.ListView
@@ -942,6 +1001,7 @@ function Execute-Action($id) {
             'clonedados' { Exec-CloneData }
             'vhdx'       { Exec-Vhdx }
             'users'      { Exec-DeleteUser }
+            'renameuser' { Exec-RenameUser }
             'createuser' { Exec-CreateUser }
             'share'      { Exec-Share }
             'listshares' { Exec-RemoveShare }
@@ -2027,42 +2087,7 @@ function Exec-DeleteUser {
     if ($isLoggedIn) {
         Set-Status "Desconectando e deslogando '$name'..." ([System.Drawing.Color]::DarkOrange)
         try {
-            # Primeiro identifica todas as sessoes do usuario
-            $userSessions = @()
-            $sessions = quser 2>$null
-            foreach ($line in $sessions) {
-                if ($line -match "^\s*>?\s*(\S+)\s+(?:\S+\s+)?(\d+)\s+(\w+)") {
-                    $sessUser = $matches[1].TrimStart('>').Trim()
-                    $sessId = $matches[2]
-                    if ($sessUser -ieq $name) {
-                        $userSessions += $sessId
-                    }
-                }
-            }
-
-            # ETAPA 1: tsdiscon = desconecta imediato (mesmo que o Task Manager > Disconnect faz).
-            # Mais agressivo que logoff: nao espera apps fecharem, so corta a sessao.
-            foreach ($sid in $userSessions) {
-                tsdiscon $sid 2>&1 | Out-Null
-            }
-            Start-Sleep -Seconds 2
-
-            # ETAPA 2: logoff = encerra a sessao definitivamente
-            foreach ($sid in $userSessions) {
-                logoff $sid 2>&1 | Out-Null
-            }
-            Start-Sleep -Seconds 2
-
-            # ETAPA 3: matar TODOS os processos restantes
-            taskkill /F /FI "USERNAME eq $name" 2>&1 | Out-Null
-            Start-Sleep -Seconds 1
-
-            # ETAPA 4: descarregar hive de registro
-            if ($userSid) {
-                reg unload "HKU\$userSid" 2>&1 | Out-Null
-                reg unload "HKU\$($userSid)_Classes" 2>&1 | Out-Null
-            }
-            Start-Sleep -Seconds 1
+            Disconnect-UserSession $name $userSid
         } catch {
             Show-Msg "Erro ao desconectar '$name': $($_.Exception.Message)" 'Erro' 'Error'
             return
@@ -2146,6 +2171,171 @@ function Exec-DeleteUser {
         Set-Status "$name removido parcialmente - ver dialog" ([System.Drawing.Color]::DarkOrange)
     }
     Build-Panel 'users'  # refresh lista
+}
+
+# Solta um perfil de usuario que esta logado/preso, na ordem que funciona:
+# tsdiscon (corta a sessao sem esperar app) -> logoff -> taskkill -> unload do hive.
+# Usado pelo apagar E pelo renomear perfil (logoff sozinho nao solta os handles).
+function Disconnect-UserSession($name, $userSid) {
+    $userSessions = @()
+    $sessions = quser 2>$null
+    foreach ($line in $sessions) {
+        if ($line -match "^\s*>?\s*(\S+)\s+(?:\S+\s+)?(\d+)\s+(\w+)") {
+            $sessUser = $matches[1].TrimStart('>').Trim()
+            if ($sessUser -ieq $name) { $userSessions += $matches[2] }
+        }
+    }
+
+    # ETAPA 1: tsdiscon = desconecta imediato (mesmo que o Task Manager > Disconnect faz).
+    # Mais agressivo que logoff: nao espera apps fecharem, so corta a sessao.
+    foreach ($sid in $userSessions) { tsdiscon $sid 2>&1 | Out-Null }
+    Start-Sleep -Seconds 2
+
+    # ETAPA 2: logoff = encerra a sessao definitivamente
+    foreach ($sid in $userSessions) { logoff $sid 2>&1 | Out-Null }
+    Start-Sleep -Seconds 2
+
+    # ETAPA 3: matar TODOS os processos restantes
+    taskkill /F /FI "USERNAME eq $name" 2>&1 | Out-Null
+    Start-Sleep -Seconds 1
+
+    # ETAPA 4: descarregar hive de registro
+    if ($userSid) {
+        reg unload "HKU\$userSid" 2>&1 | Out-Null
+        reg unload "HKU\$($userSid)_Classes" 2>&1 | Out-Null
+    }
+    Start-Sleep -Seconds 1
+}
+
+# Renomear a pasta do perfil (C:\Users\xyz).
+# Renomear a CONTA nunca renomeia a pasta: quem manda e o ProfileImagePath no
+# registro, gravado no primeiro login. A ORDEM aqui e o que importa - pasta
+# primeiro, registro so se a pasta saiu. Invertido (ou sem try), da o classico
+# "pasta antiga + registro novo" = perfil temporario no proximo login.
+function Exec-RenameUser {
+    $sel = $script:ctx.profiles.SelectedItems
+    if (-not $sel -or $sel.Count -eq 0) { Show-Msg "Selecione um perfil." 'Aviso' 'Warning'; return }
+    $item = $sel[0]
+    $info = $item.Tag
+    $oldFolder = $item.Text
+    $new = $script:ctx.newname.Text.Trim()
+    $renameAccount = $script:ctx.alsoAccount.Checked
+    $makeJunction  = $script:ctx.junction.Checked
+
+    $usersRoot = Split-Path $info.RegPath -Parent   # normalmente C:\Users
+    $newPath   = Join-Path $usersRoot $new
+
+    # --- validacoes ---
+    if (-not $new) { Show-Msg "Digite o novo nome da pasta." 'Aviso' 'Warning'; return }
+    if ($new -match '[\\/:*?"<>|]' -or $new -match '\s') {
+        Show-Msg "Nome invalido (sem espacos nem \ / : * ? `" < > |)." 'Aviso' 'Warning'; return
+    }
+    if ($new -ieq $oldFolder) { Show-Msg "O nome novo e igual ao atual." 'Aviso' 'Warning'; return }
+    if ($oldFolder -in @('Administrator','Administrador','Default','Public','DefaultAccount','WDAGUtilityAccount')) {
+        Show-Msg "Perfil de sistema, nao renomeie." 'Aviso' 'Warning'; return
+    }
+    if (Test-Path $newPath) { Show-Msg "Ja existe $newPath. Escolha outro nome." 'Aviso' 'Warning'; return }
+    if ($renameAccount -and $info.Account -and $new.Length -gt 20) {
+        Show-Msg "Conta local do Windows aceita no maximo 20 caracteres. Encurte o nome ou desmarque 'Renomear tambem a conta local'." 'Aviso' 'Warning'; return
+    }
+
+    # Nao da pra renomear o perfil em que voce esta logado (arquivos em uso o tempo todo)
+    if ($info.RegPath -ieq $env:USERPROFILE) {
+        Show-Msg "Esse e o perfil em que voce esta logado agora. Faca logoff e rode isto por outra conta admin." 'Aviso' 'Warning'; return
+    }
+
+    # --- origem em disco: normalmente a pasta do registro; se o registro estiver
+    # apontando pro vazio (tentativa anterior pela metade), tenta a pasta orfa ---
+    $srcPath = $info.RegPath
+    $fixMsg  = ""
+    if (-not $info.OnDisk) {
+        $known  = @(Get-CimInstance Win32_UserProfile | ForEach-Object { Split-Path $_.LocalPath -Leaf })
+        $known += @('Default','Default User','Public','All Users','Todos os Usuarios','Usuario Padrao')
+        $orphans = @(Get-ChildItem $usersRoot -Force -Directory -ErrorAction SilentlyContinue |
+                     Where-Object { $_.Name -notin $known })
+        if ($orphans.Count -eq 1) {
+            $srcPath = $orphans[0].FullName
+            $fixMsg  = "`n`nATENCAO: o registro aponta pra $($info.RegPath), que NAO existe (operacao anterior pela metade). Vou usar a pasta orfa $srcPath como origem e reconciliar o registro."
+        } else {
+            Show-Msg ("O registro desse perfil aponta pra $($info.RegPath), que nao existe, e nao deu pra adivinhar qual pasta de $usersRoot pertence a ele ($($orphans.Count) candidatas).`n`nRenomeie a pasta certa na mao pra '$new' e depois ajuste o ProfileImagePath do SID $($info.Sid).") 'Aviso' 'Warning'
+            return
+        }
+    }
+
+    # --- confirmacao ---
+    $plan = @()
+    $plan += " - Pasta: $srcPath  ->  $newPath"
+    if ($renameAccount -and $info.Account) { $plan += " - Conta local: $($info.Account)  ->  $new" }
+    elseif ($renameAccount -and -not $info.Account) { $plan += " - Conta local: nenhuma encontrada pro SID (nada a renomear)" }
+    $plan += " - Registro: ProfileImagePath do SID $($info.Sid)  ->  $newPath"
+    if ($makeJunction) { $plan += " - Atalho (junction): $srcPath aponta pro nome novo" }
+    if ($info.Loaded)  { $plan += "`nO perfil esta EM USO: vai levar logoff forcado antes." }
+
+    if (-not (Confirm-Action ("Renomear o perfil '$oldFolder' pra '$new'?$fixMsg`n`n" + ($plan -join "`n") + "`n`nDepois REINICIE o PC antes de logar nesse perfil.`n`nContinuar?"))) { return }
+
+    # --- 0. soltar o perfil se estiver logado ---
+    if ($info.Loaded) {
+        Set-Status "Deslogando '$oldFolder'..." ([System.Drawing.Color]::DarkOrange)
+        try { Disconnect-UserSession $(if ($info.Account) { $info.Account } else { $oldFolder }) $info.Sid }
+        catch { Show-Msg "Erro ao deslogar: $($_.Exception.Message)" 'Erro' 'Error'; return }
+    }
+
+    # --- 1. a pasta PRIMEIRO: e o passo que pode travar. Se travar, PARA AQUI -
+    # registro e conta ficam intactos e o perfil continua utilizavel ---
+    Set-Status "Renomeando pasta..." ([System.Drawing.Color]::DarkOrange)
+    try {
+        Rename-Item -LiteralPath $srcPath -NewName $new -ErrorAction Stop
+    } catch {
+        Set-Status "Pasta travada - nada foi alterado" ([System.Drawing.Color]::DarkRed)
+        Show-Msg ("Nao deu pra renomear a pasta - NADA foi alterado (registro e conta intactos, perfil segue funcionando):`n`n$($_.Exception.Message)`n`nQuase sempre e handle preso de processo do perfil. REINICIE o PC, logue nesta conta admin e rode de novo - logo apos o boot a pasta sai livre.") 'Aviso' 'Warning'
+        Build-Panel 'renameuser'
+        return
+    }
+
+    # --- 2. conta local (cosmetico: o perfil e ligado pelo SID, nao pelo nome) ---
+    $accountMsg = "nao aplicavel"
+    if ($renameAccount -and $info.Account) {
+        if ($info.Account -ieq $new) { $accountMsg = "ja era '$new'" }
+        else {
+            try { Rename-LocalUser -Name $info.Account -NewName $new -ErrorAction Stop; $accountMsg = "$($info.Account) -> $new" }
+            catch { $accountMsg = "FALHOU ($($_.Exception.Message))" }
+        }
+    }
+
+    # --- 3. registro: agora sim, a pasta existe com o nome novo ---
+    $regOk = $false
+    $regErr = $null
+    try {
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$($info.Sid)" `
+                         -Name ProfileImagePath -Value $newPath -ErrorAction Stop
+        $regOk = $true
+    } catch { $regErr = $_.Exception.Message }
+
+    # Valor solto na chave-mae (sujeira de script que gravou com SID vazio): ali nao existe ProfileImagePath
+    Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList" `
+                        -Name ProfileImagePath -ErrorAction SilentlyContinue
+
+    # --- 4. junction opcional, pra app com caminho fixo ---
+    $juncMsg = ""
+    if ($makeJunction) {
+        try { New-Item -ItemType Junction -Path $srcPath -Target $newPath -ErrorAction Stop | Out-Null; $juncMsg = "`nAtalho (junction) criado em $srcPath." }
+        catch { $juncMsg = "`nAtalho (junction) FALHOU: $($_.Exception.Message)" }
+    }
+
+    # --- 5. conferencia pelo registro, nao pelo que a gente acha que gravou ---
+    $regNow = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$($info.Sid)" -Name ProfileImagePath -ErrorAction SilentlyContinue).ProfileImagePath
+    $coerente = ($regOk -and (Test-Path $newPath) -and ($regNow -ieq $newPath))
+
+    if ($coerente) {
+        Show-Msg "Perfil renomeado pra '$new'.`n`nPasta: $newPath`nRegistro: $regNow`nConta local: $accountMsg$juncMsg`n`nREINICIE o PC antes de logar nesse perfil." "Sucesso"
+        Set-Status "Perfil renomeado pra $new - reiniciar antes de logar" ([System.Drawing.Color]::DarkGreen)
+    } else {
+        Show-Msg ("ATENCAO - estado INCONSISTENTE, conserte antes de logar em '$new':`n`nPasta $newPath : $(if (Test-Path $newPath) {'OK'} else {'NAO EXISTE'})`nRegistro (SID $($info.Sid)): $(if ($regNow) { $regNow } else { '(vazio)' })`nConta local: $accountMsg$juncMsg`n`n" +
+                  "$(if ($regErr) { "Erro no registro:`n$regErr`n`n" })" +
+                  "Enquanto pasta e registro nao apontarem pro mesmo lugar, logar nesse perfil cria um perfil TEMPORARIO. Aponte o ProfileImagePath do SID pra pasta que existe de fato.") 'Aviso' 'Warning'
+        Set-Status "Renomeacao inconsistente - ver dialog" ([System.Drawing.Color]::DarkRed)
+    }
+    Build-Panel 'renameuser'  # refresh lista
 }
 
 function Exec-CreateUser {

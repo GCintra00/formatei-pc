@@ -113,6 +113,7 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 |                 |                                     |
 | USUARIOS        |                                     |
 |  - Listar/Apagar|                                     |
+|  - Renom. perfil|                                     |
 |                 |                                     |
 | SISTEMA         |                                     |
 |  - Reparar Boot |              [ EXECUTAR ACAO ]      |
@@ -141,6 +142,7 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li><a href="#clonedados">Clonar disco de dados</a></li>
 <li><a href="#vhdx">Imagem VHDX (snapshot do C:)</a></li>
 <li><a href="#users">Listar e apagar perfis</a></li>
+<li><a href="#renameuser">Renomear pasta de perfil</a></li>
 <li><a href="#createuser">Criar novo usuario local</a></li>
 <li><a href="#share">Compartilhar pasta na rede (SMB)</a></li>
 <li><a href="#listshares">Listar compartilhamentos ativos</a></li>
@@ -371,6 +373,36 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li>Confirmacao Yes/No antes de executar.</li>
 </ul>
 <div class="info">Util quando voce ajuda outro usuario e quer remover seu proprio perfil "tecnico" que criou pra fazer manutencao no PC dele, sem deixar lixo.</div>
+</div>
+
+<div class="action-card" id="renameuser">
+<div class="action-title">Renomear pasta de perfil (C:\Users\xyz) <span class="tag tag-user">correcao de nome</span></div>
+<p class="action-desc">Troca o nome da pasta do perfil - ex: <code>C:\Users\CintrAvell</code> vira <code>C:\Users\acamargo</code>. Renomear a <strong>conta</strong> (ou o nome completo) no Windows <strong>nunca</strong> renomeia a pasta: quem manda e o <code>ProfileImagePath</code> no registro, gravado no primeiro login. Tipico em PC que herdou o nome de outra instalacao/boot.</p>
+<h4>Campos</h4>
+<ul class="action-fields">
+<li><strong>Lista de perfis:</strong> pasta atual, conta local dona do SID, tamanho e status. Linha cinza = perfil em uso; linha vermelha = <strong>INCONSISTENTE</strong> (o registro aponta pra uma pasta que nao existe).</li>
+<li><strong>Novo nome da pasta:</strong> sem espacos nem <code>\ / : * ? " &lt; &gt; |</code> (validado). Bloqueia se ja existir pasta com esse nome.</li>
+<li><strong>Renomear tambem a conta local:</strong> marcado por padrao - roda <code>Rename-LocalUser</code> no dono do SID (limite de 20 caracteres do Windows e validado).</li>
+<li><strong>Criar atalho (junction) com o nome antigo:</strong> desmarcado por padrao. Em PC ja em uso, mantem funcionando o que tem caminho absoluto gravado. Em PC recem-formatado nao precisa.</li>
+</ul>
+<h4>A ordem importa (e o motivo desta acao existir)</h4>
+<ol class="action-fields">
+<li>Se o perfil estiver logado: desconecta e desloga a forca (<code>tsdiscon</code> + <code>logoff</code> + <code>taskkill</code> + unload do hive).</li>
+<li>Renomeia a conta local, se marcado.</li>
+<li><strong>Renomeia a pasta.</strong> Se travar, <strong>PARA AQUI</strong> - o registro fica intacto e o perfil continua utilizavel.</li>
+<li>So entao grava o <code>ProfileImagePath</code> do SID apontando pra pasta nova.</li>
+<li>Cria a junction, se marcado, e confere lendo o registro de volta.</li>
+</ol>
+<div class="aviso">Fazer isso na mao e gravar o registro <em>antes</em> (ou sem <code>try/catch</code>) produz "pasta antiga + registro novo" - e no proximo login o Windows entrega um <strong>perfil TEMPORARIO</strong>. Esta acao existe pra tornar esse erro impossivel: registro so e tocado se a pasta saiu.</div>
+<h4>Travas de seguranca e comportamento</h4>
+<ul class="action-fields">
+<li>Bloqueia renomear o perfil em que voce esta logado - rode por <strong>outra conta admin</strong>.</li>
+<li>Perfis de sistema bloqueados: Administrator/Administrador, Default, Public, DefaultAccount, WDAGUtilityAccount.</li>
+<li>Perfil marcado INCONSISTENTE: se houver exatamente uma pasta orfa em <code>C:\Users</code>, usa ela como origem e reconcilia o registro (avisa na confirmacao); se houver duvida, nao chuta - explica o que ajustar na mao.</li>
+<li>Limpa um <code>ProfileImagePath</code> gravado por engano na chave-mae <code>ProfileList</code> (sujeira de script que rodou com SID vazio).</li>
+<li>Confere o resultado <strong>lendo o registro de volta</strong>; se pasta e registro nao apontarem pro mesmo lugar, grita em vez de dizer "sucesso".</li>
+</ul>
+<div class="info">"Arquivo sendo usado por outro processo" nessa pasta e o caso comum: logoff nao solta os handles. Reinicie, logue na conta admin e rode de novo - logo apos o boot a pasta sai livre. <strong>Reinicie antes de logar no perfil renomeado.</strong></div>
 </div>
 
 <div class="action-card" id="createuser">

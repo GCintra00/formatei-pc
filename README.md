@@ -280,6 +280,7 @@ Canivete suico de manutencao de disco. Interface unica com 14 acoes agrupadas em
 
 **USUARIOS**
 - **Listar e apagar perfis** — Mostra perfis locais com tamanho e ultimo uso. Permite apagar perfis antigos (remove pasta + conta + registro). Bloqueia perfil em uso.
+- **Renomear pasta de perfil** — Troca o nome de `C:\Users\xyz` (que renomear a conta nunca muda). Pergunta o nome novo, renomeia a pasta e so depois aponta o `ProfileImagePath` do registro pra ela; se a pasta estiver travada, nada e gravado. Opcional: renomear tambem a conta local e criar junction com o nome antigo. Rodar por outra conta admin e reiniciar antes de logar.
 
 ### Como usar
 
