@@ -283,6 +283,9 @@ $script:actions = @(
     @{Id='activate'; Name='Ativar Windows (licenca da placa-mae)'; Cat='SISTEMA'; Desc='Le a chave OEM gravada no firmware da placa-mae (tabela MSDM) - a licenca que JA veio comprada com o PC - e mostra o status de ativacao, o tipo de licenca (OEM/Retail/Volume/KMS) e a validade (OEM/Retail = permanente, sem expiracao). Marque "Forcar reativacao" pra instalar a chave OEM e reativar (util apos reinstalar o Windows). Nao funciona em placa sem licenca embutida (avisa).'},
     @{Id='repairboot'; Name='Reparar Boot / Sistema (DISM + SFC)'; Cat='SISTEMA'; Desc='Reparo ONLINE (com o Windows aberto): roda DISM /RestoreHealth (conserta a imagem do sistema, a "fonte" que o SFC usa) e depois SFC /scannow (conserta arquivos protegidos do Windows), le e resume o SrtTrail.txt (o log da tela "nao foi possivel reparar"), e SALVA um arquivo .log no Desktop com o RESULTADO DO SFC na primeira linha e o que ainda falta fazer. Nao roda bootrec/bcdboot (esses so funcionam no WinRE) - mas o log te diz se precisa ir pra la. Envie o .log gerado se precisar de ajuda.'},
 
+    # === SEGURANCA ===
+    @{Id='rastreador'; Name='Rastreador de acessos remotos'; Cat='SEGURANCA'; Desc='So leitura, nao altera e nao remove nada. Procura QUEM pode entrar nesta maquina de fora: programas de acesso remoto e RMM (AnyDesk, TeamViewer, ScreenConnect, Atera, RustDesk, Action1 e ~25 outros), servico ou tarefa agendada rodando de lugar incomum, AnyDesk com senha fixa (entra sem ninguem aceitar) e RDP habilitado. Confere QUEM ASSINOU cada binario - "alterado depois de assinado" nunca e normal. Fala PT/ES/EN conforme o Windows. Gera um TXT no Desktop pronto pra ler OU pra colar em qualquer IA (o arquivo traz as instrucoes e um bloco JSON dentro). Abre em janela propria. Roda direto do repo formatei-pc (GCintra00).'},
+
     # === INTERNET/WIFI ===
     @{Id='netdiag'; Name='Diagnostico de conexao (WiFi + ping)'; Cat='INTERNET/WIFI'; Desc='So leitura, nao muda nada. Mede sinal WiFi, banda e taxa, e faz ping no roteador e na internet pra dizer DE QUEM e a lentidao: do seu PC/WiFi, do roteador ou do provedor. Resumo no topo, detalhes embaixo.'},
     @{Id='netopt'; Name='Otimizar rede (placa WiFi + DNS)'; Cat='INTERNET/WIFI'; Desc='Aplica ajustes SEGUROS do lado do PC: desliga a economia de energia da placa WiFi (causa lentidao/quedas) e limpa o cache DNS. Opcional: definir DNS rapido (8.8.8.8/1.1.1.1) - NAO use em PC corporativo com DNS interno. Nao mexe em TCP/winsock (mito/arriscado).'}
@@ -432,7 +435,8 @@ function Build-Panel($actionId) {
                 @{Name='Preparar HDD Storage'; Desc='wipe + format NTFS focado'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/prepare-storage.ps1 | iex'},
                 @{Name='Limpeza do Sistema'; Desc='cache, cookies, temp'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/limpeza.ps1 | iex'},
                 @{Name='UTI do Windows v6'; Desc='PC travado: mata apps + startup + DISM/SFC + disco (respirando por maquinas)'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/uti-v6.ps1 | iex'},
-                @{Name='Corrigir DNS (Google 8.8.8.8)'; Desc='resolve DNS quebrado em PCs recem-formatados'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }'},
+                @{Name='Rastreador de acessos remotos'; Desc='quem pode entrar de fora: RMM/acesso remoto + assinatura + RDP; TXT no Desktop pronto pra IA'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/rastreador-acessos-remotos.ps1 | iex'},
+                                @{Name='Corrigir DNS (Google 8.8.8.8)'; Desc='resolve DNS quebrado em PCs recem-formatados'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }'},
                 @{Name='Serial Number do PC'; Desc='mostra serial da BIOS (pra registro)'; Cmd='(Get-CimInstance Win32_BIOS).SerialNumber'},
                 @{Name='IP LAN da maquina'; Desc='mostra IP local'; Cmd='(Get-NetIPAddress -AddressFamily IPv4 | Where { $_.PrefixOrigin -in "Dhcp","Manual" -and $_.IPAddress -notlike "169.*" -and $_.IPAddress -notlike "127.*" } | Select -First 1).IPAddress'},
                 @{Name='Listar usuarios locais'; Desc='nome, nome completo, ultimo login'; Cmd='Get-LocalUser | Where Enabled | Format-Table Name, FullName, LastLogon'},
@@ -440,7 +444,8 @@ function Build-Panel($actionId) {
             )
             $script:helpCmdsIGN = @(
                 @{Name='Setup PC Empresa'; Desc='setup corporativo IG Networks (13 etapas)'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/igcintra/pc-setup/master/setup.ps1 | iex'},
-                @{Name='Diagnostico de Audio'; Desc='coleta endpoints/drivers/mic/fone - copia pro clipboard'; Cmd='irm https://raw.githubusercontent.com/igcintra/pc-setup/master/diag-audio.ps1 | iex'}
+                @{Name='Verificacao de seguranca (Action1)'; Desc='mesmo rastreador, versao da empresa - o nome do arquivo casa com o tutorial do accounting'; Cmd='irm https://raw.githubusercontent.com/igcintra/pc-setup/master/verificar-action1.ps1 | iex'},
+                                @{Name='Diagnostico de Audio'; Desc='coleta endpoints/drivers/mic/fone - copia pro clipboard'; Cmd='irm https://raw.githubusercontent.com/igcintra/pc-setup/master/diag-audio.ps1 | iex'}
             )
 
             # === TabControl com 2 abas ===
@@ -855,6 +860,10 @@ function Build-Panel($actionId) {
             Add-Label 10 10 460 44 "Abre a UTI do Windows numa janela PowerShell propria (elevada). La dentro ela pergunta o modo: [1] watchdog ou [2] log completo. Log e backups: Desktop\UTI-backup." $false
             $script:ctx.output = Add-Multiline 10 60 460 210
         }
+        'rastreador' {
+            Add-Label 10 10 460 58 "Abre o rastreador numa janela PowerShell propria. Nao pede admin (com admin ve mais). Ao final salva um TXT no Desktop: acessos-remotos-USUARIO-PC-data.txt - da pra ler na mao ou colar numa IA, o arquivo ja explica o que ela deve fazer." $false
+            $script:ctx.output = Add-Multiline 10 74 460 196
+        }
         'netopt' {
             Add-Label 10 8 460 22 "Ajustes seguros (clique Executar pra aplicar os marcados):" $true
             $script:ctx.optPower    = Add-Checkbox 10 34 460 "Desligar economia de energia da placa WiFi" $true
@@ -925,6 +934,7 @@ function Execute-Action($id) {
             'format'     { Exec-Format }
             'chkdsk'     { Exec-Chkdsk }
             'uti'        { Exec-Uti }
+            'rastreador' { Exec-Rastreador }
             'repairboot' { Exec-RepairBoot }
             'defrag'     { Exec-Defrag }
             'wipefree'   { Exec-WipeFree }
@@ -1473,6 +1483,19 @@ function Exec-Uti {
                 "Acompanhe por la. Ao final: REINICIAR o PC.`n" +
                 "Log + backups da inicializacao: Desktop\UTI-backup")
     Set-Status "UTI lancada em nova janela" ([System.Drawing.Color]::DarkGreen)
+}
+
+function Exec-Rastreador {
+    $cmd = 'irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/rastreador-acessos-remotos.ps1 | iex'
+    Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',$cmd
+    Set-Output ("Rastreador aberto em janela propria (leva menos de 1 minuto).`n`n" +
+                "Veredito na tela: ACHADO / REVISAR / LIMPO.`n" +
+                "Relatorio: Desktop\acessos-remotos-USUARIO-PC-data.txt`n`n" +
+                "O TXT pode ser colado em qualquer IA - ele carrega as instrucoes e um`n" +
+                "bloco [DADOS-JSON] dentro, alem da secao [COBERTURA-E-LIMITES] que diz`n" +
+                "o que a varredura NAO consegue provar.`n`n" +
+                "Se der ACHADO: nao desinstalar e nao apagar nada - a maquina e prova.")
+    Set-Status "Rastreador lancado em nova janela" ([System.Drawing.Color]::DarkGreen)
 }
 
 function Exec-NetOpt {
