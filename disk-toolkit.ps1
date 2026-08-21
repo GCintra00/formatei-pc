@@ -241,6 +241,140 @@ function Get-VolumeDropdownItems {
     return $items
 }
 
+# ============= CALOR / ENERGIA (so leitura) =============
+# Devolve as linhas do laudo termico. Nasceu do caso do Vivobook da marellano
+# (21/08/2026): "esquenta muito" so sai do achismo medindo temperatura, clock,
+# evento de firmware e desligamento sujo - nada disso a gente ve no olho.
+function Get-TermicoLinhas {
+    param([switch]$ComDisco)
+    $L = New-Object System.Collections.ArrayList
+    function A($t) { [void]$L.Add($t) }
+    $d30 = (Get-Date).AddDays(-30)
+
+    # --- firmware: BIOS velha e' causa classica de fan burro e clock preso ---
+    try {
+        $b = Get-CimInstance Win32_BIOS -ErrorAction Stop
+        $meses = [math]::Round(((Get-Date) - $b.ReleaseDate).TotalDays / 30)
+        $fl = if ($meses -ge 12) { " <- $meses meses de idade: procurar BIOS nova (MyASUS / site do fabricante)" } else { '' }
+        A ("BIOS: {0} de {1:dd/MM/yyyy}{2}" -f $b.SMBIOSBIOSVersion, $b.ReleaseDate, $fl)
+    } catch {}
+
+    # --- carga atual + throttling (clock em % do nominal) ---
+    $carga = $null
+    try {
+        $perf = Get-CimInstance Win32_PerfFormattedData_Counters_ProcessorInformation -ErrorAction Stop | Where-Object Name -eq '_Total'
+        $carga = [int]$perf.PercentProcessorTime
+        $clock = [int]$perf.PercentProcessorPerformance
+        $fl = if ($clock -lt 40 -and $carga -gt 50) { ' <- CPU FREADA sob carga (calor ou driver)' } else { '' }
+        A ("CPU agora: carga {0}% | clock {1}% do nominal{2}" -f $carga, $clock, $fl)
+    } catch {}
+
+    # --- temperatura: nem todo notebook expoe ACPI (ai so HWiNFO ve) ---
+    $tMax = $null
+    $tz = $null
+    try { $tz = Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop } catch {}
+    if ($tz) {
+        foreach ($z in $tz) {
+            $c = [math]::Round(($z.CurrentTemperature / 10) - 273.15, 1)
+            if ($null -eq $tMax -or $c -gt $tMax) { $tMax = $c }
+            A ("Temperatura {0}: {1} C (desliga em {2} C)" -f ($z.InstanceName -replace '.*\\', ''), $c, [math]::Round(($z.CriticalTripPoint / 10) - 273.15))
+        }
+    } else {
+        A 'Temperatura: este modelo nao expoe ACPI -> medir com HWiNFO64 portable (aba Sensors)'
+    }
+
+    # veredito termico: o que importa e' a temperatura CRUZADA com a carga
+    if ($null -ne $tMax) {
+        $ocioso = ($null -eq $carga) -or ($carga -lt 25)
+        if     ($tMax -ge 90)                { A "  VEREDITO: MUITO QUENTE ($tMax C) - risco de desligar sozinho. Limpar ventoinha + pasta termica." }
+        elseif ($tMax -ge 70 -and $ocioso)   { A "  VEREDITO: QUENTE EM REPOUSO ($tMax C com CPU quase parada) - deveria estar em 45-55 C. Ventoinha entupida/pasta seca ou BIOS velha." }
+        elseif ($tMax -ge 80)                { A "  VEREDITO: quente ($tMax C), mas sob carga de $carga% - aceitavel se cair rapido ao parar." }
+        elseif ($tMax -ge 60 -and $ocioso)   { A "  VEREDITO: morno demais parado ($tMax C) - vigiar; se subir de 70 C, limpeza fisica." }
+        else                                 { A "  VEREDITO: temperatura OK ($tMax C)." }
+    }
+
+    if ($ComDisco) {
+        try {
+            Get-PhysicalDisk -ErrorAction Stop | ForEach-Object {
+                $r = $_ | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue
+                A ("Disco: {0} | Saude: {1} | Temp: {2} C | Temp MAX: {3} C | Desgaste: {4}%" -f $_.FriendlyName, $_.HealthStatus, "$($r.Temperature)", "$($r.TemperatureMax)", "$($r.Wear)")
+            }
+            A '  (NVMe parado: 35-45 C normal; 60+ = calor preso na carcaca; 70+ quente)'
+        } catch {}
+    }
+
+    # --- firmware freando a CPU: 37/38 = limitada pelo firmware, 55 = engine de energia resetada ---
+    try {
+        $kp = Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-Kernel-Processor-Power'; StartTime=$d30} -ErrorAction Stop
+        if ($kp) {
+            $kp | Group-Object Id | Sort-Object Name | ForEach-Object {
+                $sig = switch ($_.Name) {
+                    '37' { 'CPU limitada PELO FIRMWARE (BIOS/EC) - atualizar BIOS' }
+                    '38' { 'CPU voltou ao normal depois de limitada' }
+                    '55' { 'gerenciamento de energia resetado por defeito de firmware - atualizar BIOS' }
+                    default { 'ver descricao no Visualizador de Eventos' }
+                }
+                A ("Kernel-Processor-Power ID {0}: {1}x em 30 dias - {2}" -f $_.Name, $_.Count, $sig)
+            }
+        } else { A 'Freio termico/firmware: nenhum evento em 30 dias (bom sinal)' }
+    } catch { A 'Freio termico/firmware: nenhum evento em 30 dias (bom sinal)' }
+
+    # --- WHEA: erro de HARDWARE de verdade (nao e' software) ---
+    try {
+        $whea = @(Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-WHEA-Logger'; StartTime=$d30} -ErrorAction Stop)
+        if ($whea.Count -gt 0) {
+            A ("WHEA (ERRO DE HARDWARE): {0} evento(s) em 30 dias - ultimo {1:dd/MM HH:mm} <- se coincidir com desligamento, foi hardware" -f $whea.Count, $whea[0].TimeCreated)
+        } else { A 'WHEA (erro de hardware): nenhum em 30 dias' }
+    } catch { A 'WHEA (erro de hardware): nenhum em 30 dias' }
+
+    # --- desligamentos sujos: 41 e 6008 sao O MESMO evento visto de 2 angulos.
+    #     Contar os dois separado inflava o numero (bug do laudo de 20/08: "4" eram 2).
+    try {
+        $ev = @(Get-WinEvent -FilterHashtable @{LogName='System'; Id=41,6008; StartTime=$d30} -ErrorAction Stop)
+        $momentos = @($ev | Group-Object { $_.TimeCreated.ToString('yyyy-MM-dd HH:mm') })
+        $fl = if ($momentos.Count -gt 3) { ' <- SUSPEITO (causa classica de corrupcao do repositorio de componentes)' } else { '' }
+        A ("Desligamentos SUJOS em 30 dias: {0}{1}" -f $momentos.Count, $fl)
+        foreach ($m in ($momentos | Select-Object -First 6)) {
+            $e41 = $m.Group | Where-Object Id -eq 41 | Select-Object -First 1
+            $bug = if ($e41) { "$($e41.Properties[1].Value)" } else { 'N/D' }
+            $pwr = if ($e41) { "$($e41.Properties[4].Value)" } else { 'N/D' }
+            $lei = if ($bug -ne '0' -and $bug -ne 'N/D') { 'tela azul (driver)' }
+                   elseif ($pwr -ne '0' -and $pwr -ne 'N/D') { 'botao de energia segurado' }
+                   else { 'queda seca: energia, calor ou hardware' }
+            A ("  {0} | Bugcheck {1} | {2}" -f $m.Name, $bug, $lei)
+        }
+    } catch { A 'Desligamentos sujos: (sem dados)' }
+    try {
+        $md = @(Get-ChildItem "$env:SystemRoot\Minidump\*.dmp" -ErrorAction Stop)
+        if ($md.Count -gt 0) { A ("Minidumps de tela azul: {0} (ultimo: {1})" -f $md.Count, ($md | Sort-Object LastWriteTime | Select-Object -Last 1).Name) }
+    } catch {}
+
+    # --- bateria: saude real = capacidade atual / capacidade de fabrica ---
+    try {
+        $des = (Get-CimInstance -Namespace root/wmi -ClassName BatteryStaticData -ErrorAction Stop | Select-Object -First 1).DesignedCapacity
+        $ful = (Get-CimInstance -Namespace root/wmi -ClassName BatteryFullChargedCapacity -ErrorAction Stop | Select-Object -First 1).FullChargedCapacity
+        $cic = (Get-CimInstance -Namespace root/wmi -ClassName BatteryCycleCount -ErrorAction SilentlyContinue | Select-Object -First 1).CycleCount
+        if ($des -gt 0 -and $ful -gt 0) {
+            $sau = [math]::Round(100 * $ful / $des)
+            $fl = if ($sau -lt 60) { ' <- GASTA, trocar' } elseif ($sau -lt 80) { ' <- desgaste normal de uso' } else { '' }
+            A ("Bateria: saude {0}% ({1} de {2} mWh) | ciclos: {3}{4}" -f $sau, $ful, $des, $(if ($cic) { $cic } else { 'N/D' }), $fl)
+        }
+    } catch { A 'Bateria: sem dados de capacidade (desktop, ou driver nao expoe)' }
+    try {
+        $bat = Get-CimInstance Win32_Battery -ErrorAction Stop | Select-Object -First 1
+        if ($bat) { A ("Carga atual: {0}% | {1}" -f $bat.EstimatedChargeRemaining, $(if ($bat.BatteryStatus -eq 2) { 'na tomada' } else { 'na bateria' })) }
+    } catch {}
+
+    # --- quem esta gerando o calor ---
+    try {
+        A 'Top 5 CPU agora (nome | CPU em segundos | RAM MB):'
+        Get-Process -ErrorAction Stop | Sort-Object CPU -Descending | Select-Object -First 5 |
+            ForEach-Object { A ("  {0} | {1} s | {2} MB" -f $_.Name, [math]::Round($_.CPU), [math]::Round($_.WS / 1MB)) }
+    } catch {}
+
+    return $L
+}
+
 # ============= Cataloog de acoes =============
 # Estrutura: nome interno, nome amigavel, categoria, descricao, funcao a chamar
 
@@ -282,6 +416,7 @@ $script:actions = @(
 
     # === SISTEMA ===
     @{Id='activate'; Name='Ativar Windows (licenca da placa-mae)'; Cat='SISTEMA'; Desc='Le a chave OEM gravada no firmware da placa-mae (tabela MSDM) - a licenca que JA veio comprada com o PC - e mostra o status de ativacao, o tipo de licenca (OEM/Retail/Volume/KMS) e a validade (OEM/Retail = permanente, sem expiracao). Marque "Forcar reativacao" pra instalar a chave OEM e reativar (util apos reinstalar o Windows). Nao funciona em placa sem licenca embutida (avisa).'},
+    @{Id='termico'; Name='Calor e bateria (temperatura + throttling)'; Cat='SISTEMA'; Desc='So leitura, nao muda nada. Responde "esta esquentando de mais?" com numero em vez de achismo: temperatura ACPI cruzada com a carga da CPU (74 C parado e problema, 74 C sob carga nao), clock em % do nominal pra ver se a CPU esta sendo freada, eventos de firmware limitando a CPU (37/38/55 - quase sempre BIOS velha), erro de hardware WHEA, desligamentos sujos com o BugcheckCode que separa tela azul de queda seca, minidumps, saude real da bateria (capacidade atual x de fabrica + ciclos) e quem esta comendo CPU. Da um VEREDITO por escrito. Opcional: relatorio de bateria em HTML no Desktop.'},
     @{Id='repairboot'; Name='Reparar Boot / Sistema (DISM + SFC)'; Cat='SISTEMA'; Desc='Reparo ONLINE (com o Windows aberto): roda DISM /RestoreHealth (conserta a imagem do sistema, a "fonte" que o SFC usa) e depois SFC /scannow (conserta arquivos protegidos do Windows), le e resume o SrtTrail.txt (o log da tela "nao foi possivel reparar"), e SALVA um arquivo .log no Desktop com o RESULTADO DO SFC na primeira linha e o que ainda falta fazer. Nao roda bootrec/bcdboot (esses so funcionam no WinRE) - mas o log te diz se precisa ir pra la. Envie o .log gerado se precisar de ajuda.'},
 
     # === SEGURANCA ===
@@ -436,6 +571,7 @@ function Build-Panel($actionId) {
                 @{Name='Preparar HDD Storage'; Desc='wipe + format NTFS focado'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/prepare-storage.ps1 | iex'},
                 @{Name='Limpeza do Sistema'; Desc='cache, cookies, temp'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/limpeza.ps1 | iex'},
                 @{Name='UTI do Windows v6'; Desc='PC travado: mata apps + startup + DISM/SFC + disco (respirando por maquinas)'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/uti-v6.ps1 | iex'},
+                @{Name='Calor e bateria (termico)'; Desc='temperatura cruzada com a carga, throttling, evento de firmware, desligamento sujo, saude da bateria'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/termico.ps1 | iex'},
                 @{Name='Rastreador de acessos remotos'; Desc='quem pode entrar de fora: RMM/acesso remoto + assinatura + RDP; TXT no Desktop pronto pra IA'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/rastreador-acessos-remotos.ps1 | iex'},
                                 @{Name='Corrigir DNS (Google 8.8.8.8)'; Desc='resolve DNS quebrado em PCs recem-formatados'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }'},
                 @{Name='Serial Number do PC'; Desc='mostra serial da BIOS (pra registro)'; Cmd='(Get-CimInstance Win32_BIOS).SerialNumber'},
@@ -910,6 +1046,11 @@ function Build-Panel($actionId) {
             $script:ctx.reactivate = Add-Checkbox 10 56 460 "Forcar reativacao (instala a chave OEM e ativa)" $false
             $script:ctx.output = Add-Multiline 10 85 460 185
         }
+        'termico' {
+            Add-Label 10 8 460 22 "Clique Executar pra medir calor, throttling e bateria (so leitura)." $true
+            $script:ctx.batreport = Add-Checkbox 10 32 460 "Gerar relatorio de bateria (HTML no Desktop)" $false
+            $script:ctx.output = Add-Multiline 10 58 460 212
+        }
         'netdiag' {
             Add-Label 10 8 460 22 "Clique Executar pra diagnosticar a conexao (so leitura)." $true
             $script:ctx.speedtest = Add-Checkbox 10 32 460 "Incluir teste de velocidade (baixa ~20 MB do Cloudflare)" $true
@@ -984,6 +1125,7 @@ function Execute-Action($id) {
             'info'       { Exec-Info }
             'overview'   { Populate-Overview }
             'activate'   { Exec-Activate }
+            'termico'    { Exec-Termico }
             'netdiag'    { Exec-NetDiag }
             'netopt'     { Exec-NetOpt }
             'wipe'       { Exec-Wipe }
@@ -1430,6 +1572,29 @@ function Exec-Activate {
 }
 
 # --- INTERNET/WIFI ---
+function Exec-Termico {
+    Set-Status "Medindo calor e energia..." ([System.Drawing.Color]::DarkOrange)
+
+    $linhas = @(Get-TermicoLinhas -ComDisco)
+
+    $extra = ''
+    if ($script:ctx.batreport -and $script:ctx.batreport.Checked) {
+        $rel = Join-Path ([Environment]::GetFolderPath('Desktop')) 'bateria.html'
+        powercfg /batteryreport /output $rel 2>$null | Out-Null
+        $extra = if (Test-Path $rel) { "`nRelatorio de bateria salvo em: $rel" } else { "`nNao consegui gerar o relatorio de bateria (maquina sem bateria?)." }
+    }
+
+    $out  = "=== Calor e bateria - $(Get-Date -f 'dd/MM/yyyy HH:mm') ===`n"
+    $out += "$((Get-CimInstance Win32_ComputerSystem).Manufacturer) $((Get-CimInstance Win32_ComputerSystem).Model)`n"
+    $out += "$((Get-CimInstance Win32_Processor).Name)`n`n"
+    $out += ($linhas -join "`n")
+    $out += "`n$extra"
+    $out += "`n`n--- pode colar este texto numa IA pra interpretar ---"
+
+    Set-Output $out
+    Set-Status "Medicao concluida" ([System.Drawing.Color]::DarkGreen)
+}
+
 function Exec-NetDiag {
     Set-Status "Diagnosticando rede..." ([System.Drawing.Color]::DarkOrange)
 

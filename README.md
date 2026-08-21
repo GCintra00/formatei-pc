@@ -253,7 +253,7 @@ irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/prepare-stora
 
 ## Disk Toolkit (disk-toolkit.ps1)
 
-Canivete suico de manutencao de disco. Interface unica com 14 acoes agrupadas em 5 categorias. Cada acao mostra um resumo do que faz antes de executar.
+Canivete suico de manutencao de disco. Interface unica com 15 acoes agrupadas em 5 categorias. Cada acao mostra um resumo do que faz antes de executar.
 
 ### Categorias e acoes
 
