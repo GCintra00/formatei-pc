@@ -20,7 +20,9 @@
 # NAO REMOVE NADA e NAO ALTERA CONFIGURACAO. E' so diagnostico — se achar algo,
 # a maquina precisa ser preservada como prova.
 #
-# Nao exige administrador. Fala PT / ES / EN conforme o idioma do Windows
+# EXIGE ADMINISTRADOR (desde 01/09/2026): sem elevacao ele mostra como abrir o
+# PowerShell como administrador e NAO roda - relatorio parcial vira retrabalho.
+# Fala PT / ES / EN conforme o idioma do Windows
 # (forcar com:  $env:IGN_IDIOMA = 'ES'  antes de rodar).
 #
 # ----------------------------------------------------------------------------
@@ -81,6 +83,13 @@ $STR = @{
   lim_t='ESTA MAQUINA ESTA LIMPA'
   lim_1='Nada a fazer. Obrigado pela colaboracao!'
   lim_2='(o relatorio traz algumas observacoes de rotina para a TI)'
+  adm_t='PRECISA SER ADMINISTRADOR'
+  adm_1='Esta verificacao so e confiavel com privilegio de administrador: sem ele,'
+  adm_2='parte do registro e dos servicos fica invisivel e o relatorio sai incompleto.'
+  adm_3='NADA foi verificado ainda - nenhum relatorio foi gerado.'
+  adm_4='Menu Iniciar > digite PowerShell > botao direito > "Executar como administrador".'
+  adm_5='Depois cole de novo o MESMO comando que a TI te mandou.'
+  adm_6='Se voce nao tem a senha de administrador, avise a TI - ela roda por voce.'
   manda='Mande para a TI o arquivo que ficou no seu Desktop:'
   salvo='Relatorio salvo em:'
   ia   ='Esse arquivo tambem pode ser colado em qualquer IA - ele ja traz as instrucoes dentro.'
@@ -102,6 +111,13 @@ $STR = @{
   lim_t='ESTA COMPUTADORA ESTA LIMPIA'
   lim_1='Nada que hacer. Gracias por tu colaboracion!'
   lim_2='(el reporte trae algunas observaciones de rutina para TI)'
+  adm_t='HACE FALTA SER ADMINISTRADOR'
+  adm_1='Esta verificacion solo es confiable con privilegio de administrador: sin el,'
+  adm_2='parte del registro y de los servicios queda invisible y el reporte sale incompleto.'
+  adm_3='TODAVIA no se verifico nada - no se genero ningun reporte.'
+  adm_4='Menu Inicio > escribe PowerShell > clic derecho > "Ejecutar como administrador".'
+  adm_5='Despues pega de nuevo el MISMO comando que TI te envio.'
+  adm_6='Si no tienes la contrasena de administrador, avisa a TI - ella lo ejecuta por vos.'
   manda='Envia a TI el archivo que quedo en tu Escritorio:'
   salvo='Reporte guardado en:'
   ia   ='Este archivo tambien se puede pegar en cualquier IA - ya trae las instrucciones dentro.'
@@ -123,6 +139,13 @@ $STR = @{
   lim_t='THIS MACHINE IS CLEAN'
   lim_1='Nothing to do. Thanks for your help!'
   lim_2='(the report includes some routine notes for IT)'
+  adm_t='ADMINISTRATOR REQUIRED'
+  adm_1='This check is only reliable with administrator privilege: without it,'
+  adm_2='part of the registry and services stays invisible and the report comes out incomplete.'
+  adm_3='NOTHING has been checked yet - no report was generated.'
+  adm_4='Start menu > type PowerShell > right-click > "Run as administrator".'
+  adm_5='Then paste the SAME command IT sent you again.'
+  adm_6='If you do not have the administrator password, tell IT - they can run it for you.'
   manda='Please send IT the file left on your Desktop:'
   salvo='Report saved to:'
   ia   ='This file can also be pasted into any AI - the instructions are inside it.'
@@ -136,6 +159,74 @@ Write-Host ("=" * 57) -ForegroundColor Cyan
 Write-Host ""
 Write-Host $STR.intro -ForegroundColor Gray
 Write-Host ""
+
+# ============================================================================
+# CONTADOR DE EXECUCOES  (religado em 01/09/2026 — a gestora pediu o numero)
+# ----------------------------------------------------------------------------
+# Estava DESLIGADO desde a v3 (20/08). Voltou porque o TXT no Desktop so conta
+# quem LEMBRA de mandar o arquivo — e o tutorial diz para mandar somente quando
+# o resultado NAO e' verde. Ou seja: quem deu LIMPO era invisivel para a TI.
+#
+# Manda para o Apps Script v2 (aba 'historico', 1 linha por execucao):
+#   script, host, usuario, versao, resultado
+# A planilha fica na conta Google PESSOAL do Gabriel — por isso vai nome de
+# usuario e nome do PC, e NAO vai nada do conteudo do relatorio (nem achado,
+# nem caminho de arquivo, nem assinatura). Só o veredito de uma palavra.
+#
+# NUNCA pode derrubar a varredura: try/catch proprio (o $ErrorActionPreference
+# global NAO pega excecao .NET) + TimeoutSec, e o resultado e' descartado.
+# ============================================================================
+$CONTADOR_URL = 'https://script.google.com/macros/s/AKfycbxCNI2nrcb-mDEMrSi9cmFfrvPBOT3T3MmwnnmNfWnbisdUqZDay59-eok7tg9p9varRg/exec'
+
+function Contar($resultado) {
+    try {
+        $q = 'script=rastreador' +
+             '&host='     + [uri]::EscapeDataString([string]$env:COMPUTERNAME) +
+             '&usuario='  + [uri]::EscapeDataString([string]$env:USERNAME) +
+             '&versao='   + [uri]::EscapeDataString('2026-09-01') +
+             '&resultado='+ [uri]::EscapeDataString([string]$resultado)
+        Invoke-RestMethod -Uri ($CONTADOR_URL + '?' + $q) -TimeoutSec 8 | Out-Null
+    } catch { }
+}
+
+# ============================================================================
+# EXIGENCIA DE ADMINISTRADOR  (decisao do Gabriel, 01/09/2026)
+# ----------------------------------------------------------------------------
+# Por que EXIGIR em vez de so avisar: em 01/09 as duas maquinas da rodada
+# tiveram de ser escaneadas DUAS vezes (a 1a saiu admin=False), e o laudo ficou
+# com a ressalva "sem privilegio pode ter ficado coisa invisivel" ate a 2a
+# passada. Relatorio sem elevacao gera retrabalho e duvida no veredito.
+#
+# NAO use #Requires -RunAsAdministrator: ele NAO e' honrado quando o script
+# chega por  irm <url> | iex  (nao ha arquivo de script). Tem de ser na mao.
+# NAO use exit: em  irm | iex  o exit FECHA a janela do PowerShell e a pessoa
+# nao chega a ler a mensagem. return encerra so este script.
+# ============================================================================
+$EH_ADMIN = $false
+try {
+    $EH_ADMIN = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+                ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+} catch { $EH_ADMIN = $false }
+
+if (-not $EH_ADMIN) {
+    Write-Host ("=" * 57) -ForegroundColor Yellow
+    Write-Host ("  " + $STR.adm_t) -ForegroundColor Yellow
+    Write-Host ("=" * 57) -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host $STR.adm_1 -ForegroundColor Gray
+    Write-Host $STR.adm_2 -ForegroundColor Gray
+    Write-Host $STR.adm_3 -ForegroundColor White
+    Write-Host ""
+    Write-Host $STR.adm_4 -ForegroundColor Cyan
+    Write-Host $STR.adm_5 -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host $STR.adm_6 -ForegroundColor Gray
+    Write-Host ""
+    # conta a TENTATIVA: para a gestora, quem tentou e esbarrou no admin tambem
+    # e' adesao — e para a TI e' a fila de quem precisa de ajuda para rodar.
+    Contar 'sem-admin'
+    return
+}
 
 function Etapa($n, $texto) { Write-Host ($STR.etapa -f $n, $texto) -ForegroundColor White }
 
@@ -450,7 +541,7 @@ $maq = [ordered]@{
     ligado_desde    = Safe { $os.LastBootUpTime }
     powershell      = Safe { $PSVersionTable.PSVersion.ToString() }
     admin           = Safe { ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
-    versao_script   = '2026-08-20'
+    versao_script   = '2026-09-01'
 }
 
 # ============================================================================
@@ -545,8 +636,10 @@ W "  O que esta verificacao NAO consegue provar. Ler antes de concluir qualquer 
 W "  - Ela olha 6 lugares: registro, programas instalados, log do Windows Installer,"
 W "    servicos e pastas, a pasta Downloads, e processos em execucao. Malware que"
 W "    nao usa nenhum desses caminhos nao aparece aqui."
-W "  - Ela roda como o usuario atual. Sem privilegio de administrador, parte do"
-W "    registro e dos servicos de outros perfis pode ficar invisivel."
+W "  - Ela roda COM privilegio de administrador (o script exige, desde 01/09/2026),"
+W "    entao 'ficou invisivel por falta de permissao' NAO explica um resultado vazio."
+W "    Ressalva honesta: perfil de outro usuario que nunca foi carregado nesta sessao"
+W "    tem o registro dele fora do alcance de qualquer varredura."
 W "  - Ela olha o ESTADO AGORA. Programa que foi instalado e removido depois so"
 W "    aparece se tiver deixado rastro no log do Windows Installer."
 W "  - LIMPO significa 'nada encontrado nos lugares verificados', e nunca"
@@ -573,6 +666,8 @@ try {
     try { $R | Set-Content -Path $arq -Encoding UTF8 -ErrorAction Stop }
     catch { $arq = Join-Path $env:TEMP $nomeArq; $R | Set-Content -Path $arq -Encoding UTF8 }
 }
+
+Contar $veredito
 
 # ============================================================================
 # TELA
