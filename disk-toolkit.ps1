@@ -390,6 +390,8 @@ $script:EN = @{
     OvlEfic  = '961cc777-2547-4f9d-8174-7d86181b8a7a'   # slider "Melhor eficiencia" (freia a CPU)
     Bal      = '381b4222-f694-41f0-9685-ff5bb260df2e'   # plano Equilibrado
     Saver    = 'a1841308-3541-4fab-bc81-f71556f20b4a'   # plano Economia de energia
+    SubPcie  = '501a4d13-42af-4429-9fd1-a8218c268e20'   # PCI Express
+    Aspm     = 'ee12f906-d277-404b-b6da-e5fa1a576df5'   # link state power management (ASPM)
 }
 
 function Invoke-Powercfg {
@@ -504,7 +506,89 @@ function Get-EnergiaConfigLinhas {
         } else { A 'Gerenciador de energia de fabricante: nenhum rodando' }
     } catch { A 'Gerenciador de energia de fabricante: NAO VERIFICADO (Get-Service falhou aqui)' }
 
+    # Chassi ANTES de falar de bateria: "sem bateria" num NOTEBOOK e' achado, nao caracteristica.
+    $portateis = @(8,9,10,11,12,14,18,21,30,31,32)
+    $chassi = 0
+    try { $chassi = [int](@((Get-CimInstance Win32_SystemEnclosure -ErrorAction Stop).ChassisTypes)[0]) } catch {}
+    $ehNote = ($portateis -contains $chassi)
+    $temBat = $false
+    try { $temBat = [bool](Get-CimInstance Win32_Battery -ErrorAction Stop) } catch {}
+    $script:enSemBateria = ($ehNote -and -not $temBat)
+    if ($script:enSemBateria) {
+        A 'NOTEBOOK COM BATERIA NAO DETECTADA (morta, ausente ou circuito com defeito) <- fonte classica de BD PROCHOT:'
+        A '  o sinal que, preso em alto, joga a CPU no multiplicador minimo e a mantem la, FRIA, e reboot NAO resolve'
+    } elseif ($ehNote) { A 'Bateria: presente' } else { A ("Chassi: desktop ($chassi), sem bateria - normal") }
+
     return $L
+}
+
+# ============= WHEA / AER (tempestade de erro corrigido no link PCIe) =============
+# Nasceu do Inspiron 5566 da Ju (07-08/09/2026): 11.719 eventos WHEA Id 17 ("corrigido")
+# no PCI Express Root Port. Erro CORRIGIDO nao clampa clock - mas em massa e' tempestade,
+# quase sempre ASPM, e ela ENCHE o log de Sistema e empurra a prova (evento 37) pra fora.
+function Get-WheaLinhas {
+    $L = New-Object System.Collections.ArrayList
+    function A($t) { [void]$L.Add($t) }
+    $d30 = (Get-Date).AddDays(-30)
+
+    $whea = @()
+    try { $whea = @(Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-WHEA-Logger'; StartTime=$d30} -ErrorAction Stop) } catch {}
+    if ($whea.Count -eq 0) {
+        A 'WHEA (erro de hardware): nenhum evento em 30 dias. BOM SINAL.'
+        $script:aerTempestade = $false
+    } else {
+        $corr  = @($whea | Where-Object { $_.Message -match 'corrigido|corregido|corrected' })
+        $fatal = @($whea | Where-Object { $_.Message -match 'fatal|irrecuper|uncorrect' })
+        A ("WHEA em 30 dias: {0} evento(s) -> {1} CORRIGIDO(S) | {2} FATAL(IS)" -f $whea.Count, $corr.Count, $fatal.Count)
+        A ("Taxa: ~{0} por hora" -f [math]::Round($whea.Count / 720, 1))
+        $whea | Group-Object Id | Sort-Object Count -Descending | Select-Object -First 4 | ForEach-Object {
+            $ex = ($_.Group[0].Message -split "`n" | Where-Object { $_ -match '\S' } | Select-Object -First 1)
+            A ("  Id {0}: {1}x -> {2}" -f $_.Name, $_.Count, "$ex".Trim())
+        }
+        $comp = @($whea | ForEach-Object { if ($_.Message -match '(?im)^\s*Componen[^:]*:\s*(.+)$' -or $_.Message -match '(?im)^\s*Component[^:]*:\s*(.+)$') { $matches[1].Trim() } }) | Group-Object | Sort-Object Count -Descending
+        foreach ($c in ($comp | Select-Object -First 3)) { A ("  componente: {0} ({1}x)" -f $c.Name, $c.Count) }
+        $devs = @($whea | ForEach-Object { if ($_.Message -match 'PCI\\VEN_([0-9A-Fa-f]{4})&DEV_([0-9A-Fa-f]{4})') { "PCI\VEN_$($matches[1])&DEV_$($matches[2])" } }) | Group-Object | Sort-Object Count -Descending
+        foreach ($d in ($devs | Select-Object -First 2)) {
+            $nome = ''
+            try { $nome = (Get-CimInstance Win32_PnPEntity -ErrorAction Stop | Where-Object { $_.DeviceID -like "$($d.Name)*" } | Select-Object -First 1).Name } catch {}
+            A ("  dispositivo: {0} ({1}x){2}" -f $d.Name, $d.Count, $(if ($nome) { " = $nome" } else { '' }))
+        }
+        if ($fatal.Count -gt 0) {
+            A 'LEITURA: tem evento FATAL - erro de hardware que NAO recuperou. Isso e conversa de GARANTIA.'
+        } else {
+            A 'LEITURA: "corrigido" = o link errou e SE RECUPEROU. NAO clampa clock e nao e garantia.'
+            A '         Em massa, porem, e tempestade: quase sempre ASPM (energia do link PCIe),'
+            A '         ou Wi-Fi/NVMe mal assentado. Desligar o ASPM e o teste reversivel.'
+        }
+        $script:aerTempestade = ($whea.Count -ge 100 -and $fatal.Count -eq 0)
+    }
+
+    $aspm = Get-EnergiaValor $script:EN.SubPcie $script:EN.Aspm
+    $nomes = @{0='desativado'; 1='economia moderada'; 2='economia maxima'}
+    if ($aspm[0] -ge 0) {
+        A ("ASPM (energia do link PCIe): AC = {0} | bateria = {1}" -f $nomes[[int]$aspm[0]], $nomes[[int]$aspm[1]])
+        $script:aspmLigado = ($aspm[0] -ne 0 -or $aspm[1] -ne 0)
+    } else { A 'ASPM: este plano nao expoe a configuracao de PCI Express'; $script:aspmLigado = $false }
+
+    # profundidade do log: a tempestade apaga a prova
+    try {
+        $all = @(Get-WinEvent -LogName System -MaxEvents 20000 -ErrorAction Stop)
+        A ("Log de Sistema: {0} eventos, o mais antigo de {1:dd/MM HH:mm}" -f $all.Count, $all[-1].TimeCreated)
+        $top = $all | Group-Object ProviderName | Sort-Object Count -Descending | Select-Object -First 3
+        foreach ($t in $top) { A ("  quem mais escreve: {0} ({1}x)" -f $t.Name, $t.Count) }
+        if ($all.Count -ge 15000) { A '  <- log perto do limite: eventos antigos (evento 37 e cia) estao sendo APAGADOS' }
+    } catch { A 'Log de Sistema: NAO VERIFICADO (leitura falhou aqui)' }
+
+    return $L
+}
+
+function Set-AspmDesligado {
+    $E = $script:EN
+    Invoke-Powercfg @('/setacvalueindex', 'SCHEME_CURRENT', $E.SubPcie, $E.Aspm, '0') | Out-Null
+    Invoke-Powercfg @('/setdcvalueindex', 'SCHEME_CURRENT', $E.SubPcie, $E.Aspm, '0') | Out-Null
+    Invoke-Powercfg @('/setactive', 'SCHEME_CURRENT') | Out-Null
+    $v = Get-EnergiaValor $E.SubPcie $E.Aspm
+    return ($v[0] -eq 0 -and $v[1] -eq 0)
 }
 
 function Set-EnergiaLiberada {
@@ -585,6 +669,7 @@ $script:actions = @(
     @{Id='activate'; Name='Ativar Windows (licenca da placa-mae)'; Cat='SISTEMA'; Desc='Le a chave OEM gravada no firmware da placa-mae (tabela MSDM) - a licenca que JA veio comprada com o PC - e mostra o status de ativacao, o tipo de licenca (OEM/Retail/Volume/KMS) e a validade (OEM/Retail = permanente, sem expiracao). Marque "Forcar reativacao" pra instalar a chave OEM e reativar (util apos reinstalar o Windows). Nao funciona em placa sem licenca embutida (avisa).'},
     @{Id='termico'; Name='Calor e bateria (temperatura + throttling)'; Cat='SISTEMA'; Desc='So leitura, nao muda nada. Responde "esta esquentando de mais?" com numero em vez de achismo: temperatura ACPI cruzada com a carga da CPU (74 C parado e problema, 74 C sob carga nao), clock em % do nominal pra ver se a CPU esta sendo freada, eventos de firmware limitando a CPU (37/38/55 - quase sempre BIOS velha), erro de hardware WHEA, desligamentos sujos com o BugcheckCode que separa tela azul de queda seca, minidumps, saude real da bateria (capacidade atual x de fabrica + ciclos) e quem esta comendo CPU. Da um VEREDITO por escrito. Opcional: relatorio de bateria em HTML no Desktop.'},
     @{Id='energia'; Name='Energia / clock da CPU (PC lento a 0,4 GHz)'; Cat='SISTEMA'; Desc='Para "o PC esta lento sem motivo": mede o clock REAL em % do nominal (o % do Gerenciador de Tarefas engana, e relativo ao clock atual), poe CARGA em todos os nucleos e ve se o clock SOBE - clock baixo nao e sintoma, clock que NAO SOBE e. Mostra como a energia esta: teto e piso do processador em AC e bateria (o teto que a UI do Win11 esconde), turbo, limiar da economia de energia, slider de desempenho, power throttling, politica por GPO e gerenciador do fabricante. Se "Liberar a energia" estiver marcado, aplica as correcoes (teto 100%, piso 5%, turbo agressivo, economia de energia so manual, plano Equilibrado, slider em Melhor desempenho, PowerThrottlingOff) e MEDE DE NOVO, dando o veredito: era configuracao, e limite termico/firmware, ou a CPU esta presa e a conversa passa a ser BIOS/EC/garantia. Tudo reversivel, vale na hora sem reiniciar. Opcional: log no Desktop.'},
+    @{Id='aer'; Name='PCIe: tempestade de erro corrigido (WHEA)'; Cat='SISTEMA'; Desc='Para quando o Visualizador de Eventos vive cheio de WHEA-Logger. Conta os erros de hardware reportados em 30 dias e SEPARA o que importa: "corrigido" (o link errou e se recuperou - nao clampa clock, nao e garantia) de "fatal" (nao recuperou - conversa de garantia). Mostra por Id, o componente e o dispositivo PCI\VEN&DEV com o nome dele, o estado do ASPM (energia do link PCIe) em AC e bateria, e a PROFUNDIDADE do log de Sistema com quem mais escreve nele - porque tempestade de WHEA empurra a prova (o evento 37 de CPU limitada, por exemplo) pra fora do log antes de voce ler. Se marcar "Desligar o ASPM", aplica em AC e bateria (reversivel, precisa REINICIAR) - e a causa nº1 de tempestade de erro corrigido; se nao resolver, o proximo passo e fisico: reassentar Wi-Fi e NVMe.'},
     @{Id='repairboot'; Name='Reparar Boot / Sistema (DISM + SFC)'; Cat='SISTEMA'; Desc='Reparo ONLINE (com o Windows aberto): roda DISM /RestoreHealth (conserta a imagem do sistema, a "fonte" que o SFC usa) e depois SFC /scannow (conserta arquivos protegidos do Windows), le e resume o SrtTrail.txt (o log da tela "nao foi possivel reparar"), e SALVA um arquivo .log no Desktop com o RESULTADO DO SFC na primeira linha e o que ainda falta fazer. Nao roda bootrec/bcdboot (esses so funcionam no WinRE) - mas o log te diz se precisa ir pra la. Envie o .log gerado se precisar de ajuda.'},
 
     # === SEGURANCA ===
@@ -1226,6 +1311,12 @@ function Build-Panel($actionId) {
             $script:ctx.enLog = Add-Checkbox 10 67 460 "Salvar log no Desktop" $true
             $script:ctx.output = Add-Multiline 10 94 460 176
         }
+        'aer' {
+            Add-Label 10 8 460 32 "Clique Executar pra contar os WHEA, ver o ASPM e a profundidade do log (so leitura)." $true
+            $script:ctx.aerFix = Add-Checkbox 10 44 460 "Desligar o ASPM do link PCIe (reversivel; precisa REINICIAR pra valer)" $false
+            $script:ctx.aerLog = Add-Checkbox 10 67 460 "Salvar log no Desktop" $true
+            $script:ctx.output = Add-Multiline 10 94 460 176
+        }
         'netdiag' {
             Add-Label 10 8 460 22 "Clique Executar pra diagnosticar a conexao (so leitura)." $true
             $script:ctx.speedtest = Add-Checkbox 10 32 460 "Incluir teste de velocidade (baixa ~20 MB do Cloudflare)" $true
@@ -1302,6 +1393,7 @@ function Execute-Action($id) {
             'activate'   { Exec-Activate }
             'termico'    { Exec-Termico }
             'energia'    { Exec-Energia }
+            'aer'        { Exec-Aer }
             'netdiag'    { Exec-NetDiag }
             'netopt'     { Exec-NetOpt }
             'wipe'       { Exec-Wipe }
@@ -1837,11 +1929,38 @@ function Exec-Energia {
         $out += ("CPU PRESA: nao passa de {0}% do nominal nem sob carga.`n" -f [math]::Round($depois.Perf))
         if ($aplicar) { $out += "Com a energia do Windows toda liberada -> energia DESCARTADA. Arvore de descarte:`n" }
         else { $out += "Marque 'Liberar a energia' e rode de novo antes de culpar o hardware. Depois:`n" }
-        $out += "1) BIOS nova pelo machine type (evento 37 = firmware limitando)`n"
-        $out += "2) bateria: capacidade de projeto x carga total (acao 'Calor e bateria')`n"
-        $out += "3) modo termico do fabricante (IdeaPad = Fn+Q alterna 3 modos)`n"
-        $out += "4) reset de EC: no IdeaPad e' o FURINHO (Novo/reset) na base, 10 s com clipe - NAO e' segurar o power; depois BIOS -> Load Defaults`n"
-        $out += "5) prova final: bootar Linux live e rodar 'grep cpu.MHz /proc/cpuinfo'. Preso la tambem = placa/firmware, Windows inocente -> garantia`n"
+        $fab = ''; $ser = ''; $mod = ''; $sku = ''
+        try { $c2 = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop; $fab = "$($c2.Manufacturer)"; $mod = "$($c2.Model)"; $sku = "$($c2.SystemSKUNumber)" } catch {}
+        try { $ser = "$((Get-CimInstance Win32_BIOS -ErrorAction Stop).SerialNumber)" } catch {}
+        $n = 1
+        if ($script:enSemBateria) {
+            $out += "$n) BD PROCHOT - com bateria NAO detectada, e o suspeito nº1: o circuito da bateria levanta esse`n"
+            $out += "   sinal e, preso em alto, a CPU fica no multiplicador minimo, FRIA, e reboot nao resolve.`n"
+            $out += "   Ver/desmarcar no ThrottleStop portable (caixa BD PROCHOT) - o clock sobe na hora se for isso.`n"
+            $out += "   Paliativo: desliga uma protecao, entao vigiar temperatura. PowerShell nao alcanca (e MSR).`n"
+            $n++
+        }
+        $comoBios = if ($fab -match 'Dell') { "Dell: pela SERVICE TAG ($ser), nao pelo SupportAssist" }
+                    elseif ($fab -match 'Lenovo') { "Lenovo: pelo MACHINE TYPE ($sku), NAO pelo Vantage (ja escondeu 6 revisoes)" }
+                    elseif ($fab -match 'HP|Hewlett') { "HP: pelo numero de produto/serial ($ser)" }
+                    elseif ($fab -match 'ASUS') { "ASUS: pelo modelo exato ($mod), nao pelo MyASUS" }
+                    else { "pelo modelo/serial ($mod / $ser)" }
+        $out += "$n) BIOS nova (evento 37 = firmware limitando) - $comoBios`n"; $n++
+        $out += "$n) CARREGADOR original e com watt suficiente: nao reconhecido (BIOS: 'AC Adapter Unknown') ou fraco`n"
+        $out += "   faz o firmware limitar a CPU de proposito - e sem bateria pra amortecer, piora.`n"; $n++
+        $out += "$n) bateria: capacidade de projeto x carga total (acao 'Calor e bateria')`n"; $n++
+        if ($fab -match 'Lenovo') {
+            $out += "$n) modo termico: IdeaPad = Fn+Q alterna 3 modos`n"; $n++
+            $out += "$n) reset de EC: no IdeaPad e o FURINHO (Novo/reset) na base, 10 s com clipe - NAO e segurar o power`n"; $n++
+        } elseif ($fab -match 'Dell') {
+            $out += "$n) BIOS (F2): conferir 'AC Adapter Type' e a saude/presenca da bateria na propria tela`n"; $n++
+            $out += "$n) reset de EC: desligar, tirar o carregador, segurar o power 30 s, religar so na tomada`n"; $n++
+        } else {
+            $out += "$n) modo termico/desempenho do fabricante (tecla de funcao ou app proprio)`n"; $n++
+            $out += "$n) reset de EC: desligar, tirar carregador (e bateria, se removivel), segurar o power 30 s`n"; $n++
+        }
+        $out += "   depois: BIOS -> Load Defaults`n"
+        $out += "$n) prova final: bootar Linux live e rodar 'grep cpu.MHz /proc/cpuinfo'. Preso la tambem = placa/firmware, Windows inocente -> garantia`n"
     }
 
     if ($script:ctx.enLog -and $script:ctx.enLog.Checked) {
@@ -1855,6 +1974,56 @@ function Exec-Energia {
 
     Set-Output $out
     Set-Status "Energia: medicao concluida" ([System.Drawing.Color]::DarkGreen)
+}
+
+function Exec-Aer {
+    Set-Status "Contando erros de hardware reportados (WHEA)..." ([System.Drawing.Color]::DarkOrange)
+
+    $out = "=== PCIe / WHEA - $(Get-Date -f 'dd/MM/yyyy HH:mm') ===`n"
+    try {
+        $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+        $out += "$($cs.Manufacturer) $($cs.Model)`n"
+    } catch {}
+    $out += "`n" + ((Get-WheaLinhas) -join "`n") + "`n"
+
+    $aplicar = ($script:ctx.aerFix -and $script:ctx.aerFix.Checked)
+    if ($aplicar) {
+        if (Confirm-Action ("Desligar o ASPM (gerenciamento de energia do link PCIe)?`n`n" +
+            "E' o teste padrao pra tempestade de erro corrigido no PCI Express.`n" +
+            "Vale em AC e bateria, e' reversivel, e SO passa a valer depois de REINICIAR.`n`n" +
+            "Custo: um pouco mais de consumo em repouso (o link deixa de dormir).")) {
+            if (Set-AspmDesligado) {
+                $out += "`n[OK] ASPM desligado em AC e bateria. REINICIE o PC e rode esta acao de novo.`n"
+                $out += "     Se a contagem cair pra zero, era ASPM. Se continuar, o proximo passo e FISICO:`n"
+                $out += "     reassentar a placa Wi-Fi e o NVMe (nos notebooks ficam sob a mesma tampa).`n"
+            } else {
+                $out += "`n[FALHOU] nao consegui confirmar o ASPM em 0 - este plano de energia pode nao expor a opcao.`n"
+            }
+        } else { $out += "`n(cancelado: ASPM nao foi alterado)`n" }
+    } else {
+        $out += "`n--- VEREDITO ---`n"
+        if ($script:aerTempestade -and $script:aspmLigado) {
+            $out += "TEMPESTADE de erro CORRIGIDO com o ASPM ligado -> marque 'Desligar o ASPM',`n"
+            $out += "execute, REINICIE e rode esta acao de novo pra comparar a contagem.`n"
+        } elseif ($script:aerTempestade) {
+            $out += "TEMPESTADE de erro corrigido, mas o ASPM ja esta desligado -> nao e energia do link.`n"
+            $out += "Proximo passo e FISICO: reassentar a placa Wi-Fi e o NVMe. Depois, driver/BIOS.`n"
+        } else {
+            $out += "Sem tempestade. Se havia evento FATAL na lista acima, isso e hardware - garantia.`n"
+        }
+    }
+
+    if ($script:ctx.aerLog -and $script:ctx.aerLog.Checked) {
+        try {
+            $dst = Join-Path ([Environment]::GetFolderPath('Desktop')) ("whea-pcie_{0}_{1}.txt" -f $env:COMPUTERNAME, (Get-Date -f 'yyyy-MM-dd_HHmm'))
+            $out | Out-File $dst -Encoding utf8
+            $out += "`nLog salvo em: $dst"
+        } catch { $out += "`nNao consegui salvar o log: $($_.Exception.Message)" }
+    }
+    $out += "`n`n--- pode colar este texto numa IA pra interpretar ---"
+
+    Set-Output $out
+    Set-Status "WHEA/PCIe: leitura concluida" ([System.Drawing.Color]::DarkGreen)
 }
 
 function Exec-NetDiag {

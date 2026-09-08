@@ -51,7 +51,7 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <p><strong>Uso:</strong> Pessoal e profissional &nbsp;|&nbsp; <strong>Atualizado:</strong> Setembro 2026 &nbsp;|&nbsp; <strong>Repositorio:</strong> <a href="https://github.com/GCintra00/formatei-pc">github.com/GCintra00/formatei-pc</a></p>
 
 <div class="info">
-<strong>O que e:</strong> Ferramenta GUI (janela) com <strong>28 acoes em 10 categorias</strong> - o canivete suico de atendimento. Comecou so em disco (ver saude, formatar, copiar dados, apagar perfil antigo) e cresceu pra manutencao do PC inteiro: UTI do Windows, ativacao pela licenca da placa-mae, calor e bateria, energia/clock da CPU, reparo de boot, rastreador de acesso remoto e diagnostico de rede.
+<strong>O que e:</strong> Ferramenta GUI (janela) com <strong>29 acoes em 10 categorias</strong> - o canivete suico de atendimento. Comecou so em disco (ver saude, formatar, copiar dados, apagar perfil antigo) e cresceu pra manutencao do PC inteiro: UTI do Windows, ativacao pela licenca da placa-mae, calor e bateria, energia/clock da CPU, reparo de boot, rastreador de acesso remoto e diagnostico de rede.
 </div>
 
 <div class="aviso">
@@ -172,6 +172,7 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li><a href="#activate">Ativar Windows (licenca da placa-mae)</a></li>
 <li><a href="#termico">Calor e bateria (temperatura + throttling)</a></li>
 <li><a href="#energia">Energia / clock da CPU</a></li>
+<li><a href="#aer">PCIe: tempestade de erro corrigido (WHEA)</a></li>
 <li><a href="#repairboot">Reparar Boot / Sistema (DISM + SFC)</a></li>
 <li><a href="#rastreador">Rastreador de acessos remotos</a></li>
 <li><a href="#netdiag">Diagnostico de conexao (WiFi + ping)</a></li>
@@ -624,6 +625,28 @@ ACESSO DE OUTRAS MAQUINAS WINDOWS:
 </ul>
 <div class="info"><strong>Sem carga valida nao ha veredito.</strong> Se o uso de CPU nao subir durante o teste (Start-Job bloqueado por politica, contador quebrado), ele diz que o teste nao valeu em vez de sentenciar "CPU presa" a toa.</div>
 <div class="sucesso"><strong>Tudo reversivel</strong> e vale na hora, sem reiniciar. Desmarque "Liberar a energia" pra so medir. Em notebook, liberar tudo pode esquentar e gastar mais bateria. Existe tambem a versao avulsa fora do canivete: <code>irm https://raw.githubusercontent.com/GCintra00/limpeza/master/energia.ps1 | iex</code>.</div>
+</div>
+
+<div class="action-card" id="aer">
+<div class="action-title">PCIe: tempestade de erro corrigido (WHEA) <span class="tag tag-safe">leitura</span> <span class="tag tag-maint">opcional: desliga ASPM</span></div>
+<p class="action-desc">Para quando o Visualizador de Eventos vive cheio de <strong>WHEA-Logger</strong>. A pergunta que ela responde nao e "tem erro?", e <strong>"esse erro importa?"</strong>.</p>
+<div class="info"><strong>A separacao que muda tudo:</strong> <strong>"erro corrigido"</strong> = o link errou e <em>se recuperou</em> - nao clampa clock, nao e conversa de garantia. <strong>"fatal"</strong> = nao recuperou, e ai e hardware. Milhares de eventos corrigidos assustam, mas sao tempestade, nao morte.</div>
+<h4>O que mostra</h4>
+<ul class="action-fields">
+<li><strong>Contagem em 30 dias</strong> separada em corrigidos x fatais, + a <strong>taxa por hora</strong></li>
+<li><strong>Por Id</strong>, com a primeira linha da mensagem de exemplo</li>
+<li><strong>Componente</strong> (ex.: <code>PCI Express Root Port</code>) e o <strong>dispositivo</strong> <code>PCI\VEN_&amp;DEV_</code> ja traduzido pro nome real via PnP</li>
+<li><strong>Estado do ASPM</strong> (energia do link PCIe) em AC e bateria</li>
+<li><strong>Profundidade do log de Sistema</strong> e quem mais escreve nele</li>
+</ul>
+<div class="aviso"><strong>Por que a profundidade do log importa:</strong> tempestade de WHEA <strong>empurra a prova pra fora</strong>. No caso que originou esta acao, uma consulta pelo evento 37 (CPU limitada pelo firmware) voltou <em>vazia</em> uma hora depois do laudo ter achado 4 - os eventos ja tinham rolado do log. Antes de concluir "nao ha eventos", olhe ate onde o log alcanca.</div>
+<h4>Opcao: desligar o ASPM</h4>
+<ul class="action-fields">
+<li>Aplica em AC e bateria e <strong>so passa a valer depois de REINICIAR</strong>. E reversivel.</li>
+<li>E a <strong>causa nº1</strong> de tempestade de erro corrigido. Custo: um pouco mais de consumo em repouso (o link deixa de dormir).</li>
+<li>Se a contagem nao cair depois do reboot, o proximo passo e <strong>fisico</strong>: reassentar a placa <strong>Wi-Fi</strong> e o <strong>NVMe</strong> (em notebook, os dois ficam sob a mesma tampa).</li>
+</ul>
+<div class="sucesso"><strong>Caso real (07-08/09/2026, Inspiron 5566):</strong> 11.719 eventos Id 17 no Root Port #5, ASPM em "economia maxima", CPU presa em 0,44 GHz. Desligar o ASPM + reiniciar devolveu o clock - e o laudo de energia sozinho nunca teria olhado pro PCIe.</div>
 </div>
 
 <div class="action-card" id="repairboot">
