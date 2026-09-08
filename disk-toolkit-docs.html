@@ -48,10 +48,10 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <body>
 
 <h1>Disk Toolkit - Manutencao de Disco no Windows</h1>
-<p><strong>Uso:</strong> Pessoal e profissional &nbsp;|&nbsp; <strong>Atualizado:</strong> Maio 2026 &nbsp;|&nbsp; <strong>Repositorio:</strong> <a href="https://github.com/GCintra00/formatei-pc">github.com/GCintra00/formatei-pc</a></p>
+<p><strong>Uso:</strong> Pessoal e profissional &nbsp;|&nbsp; <strong>Atualizado:</strong> Setembro 2026 &nbsp;|&nbsp; <strong>Repositorio:</strong> <a href="https://github.com/GCintra00/formatei-pc">github.com/GCintra00/formatei-pc</a></p>
 
 <div class="info">
-<strong>O que e:</strong> Ferramenta GUI (janela) com 14 acoes de manutencao de disco em uma unica interface. Pra usar quando voce esta atendendo um PC e precisa fazer alguma operacao em HDD/SSD: ver saude, formatar, copiar dados, apagar perfil de usuario antigo, e mais.
+<strong>O que e:</strong> Ferramenta GUI (janela) com <strong>28 acoes em 10 categorias</strong> - o canivete suico de atendimento. Comecou so em disco (ver saude, formatar, copiar dados, apagar perfil antigo) e cresceu pra manutencao do PC inteiro: UTI do Windows, ativacao pela licenca da placa-mae, calor e bateria, energia/clock da CPU, reparo de boot, rastreador de acesso remoto e diagnostico de rede.
 </div>
 
 <div class="aviso">
@@ -85,41 +85,62 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <h2>2. Interface</h2>
 <!-- ============================= -->
 
-<div class="mockup">+-------------------------------------------------------+
-| Disk Toolkit                                          |
-+-----------------+-------------------------------------+
-| ACOES           | TITULO DA ACAO SELECIONADA          |
-|                 |                                     |
-| INFORMACAO      | Descricao detalhada do que essa     |
-|  - SMART        | acao faz, em portugues, com avisos. |
-|  - Detalhes     |                                     |
-|                 | Campos contextuais:                 |
-| PARTICAO        |  [dropdown disco/volume]            |
-|  - Wipe&Format  |  [campos de texto]                  |
-|  - Trocar label |  [checkboxes de opcoes]             |
-|  - Trocar letra |                                     |
-|  - Redimensionar|                                     |
-|  - Formatar     |                                     |
-|                 |                                     |
-| MANUTENCAO      |                                     |
-|  - CHKDSK       |                                     |
-|  - Defrag       |                                     |
-|  - Limpar livre |                                     |
-|                 |                                     |
-| BACKUP          |                                     |
-|  - Por usuario  |                                     |
-|  - Clone dados  |                                     |
-|  - VHDX C:      |                                     |
-|                 |                                     |
-| USUARIOS        |                                     |
-|  - Listar/Apagar|                                     |
-|  - Renom. perfil|                                     |
-|                 |                                     |
-| SISTEMA         |                                     |
-|  - Reparar Boot |              [ EXECUTAR ACAO ]      |
-+-----------------+-------------------------------------+
-| status: aguardando...                                 |
-+-------------------------------------------------------+</div>
+<div class="mockup">+-----------------------------------------------------------+
+| Disk Toolkit                                              |
++--------------------+--------------------------------------+
+| ACOES              | TITULO DA ACAO SELECIONADA           |
+|                    |                                      |
+| AJUDA              | Descricao detalhada do que essa      |
+|   - Comandos       | acao faz, em portugues, com avisos.  |
+|                    |                                      |
+| INFORMACAO         | Campos contextuais:                  |
+|   - SMART          |  [dropdown disco/volume]             |
+|   - Detalhes       |  [campos de texto]                   |
+|   - Visao geral    |  [checkboxes de opcoes]              |
+|                    |                                      |
+| PARTICAO           | Saida em texto (da pra copiar e      |
+|   - Wipe&amp;Format    | colar numa IA pra interpretar).      |
+|   - Trocar label   |                                      |
+|   - Trocar letra   |                                      |
+|   - Redimensionar  |                                      |
+|   - Formatar       |                                      |
+|                    |                                      |
+| MANUTENCAO         |                                      |
+|   - UTI Windows    |                                      |
+|   - CHKDSK         |                                      |
+|   - Defrag         |                                      |
+|   - Limpar livre   |                                      |
+|                    |                                      |
+| BACKUP             |                                      |
+|   - Por usuario    |                                      |
+|   - Clone dados    |                                      |
+|   - VHDX C:        |                                      |
+|                    |                                      |
+| USUARIOS           |                                      |
+|   - Listar/Apagar  |                                      |
+|   - Renom. perfil  |                                      |
+|   - Criar usuario  |                                      |
+|                    |                                      |
+| REDE               |                                      |
+|   - Compartilhar   |                                      |
+|   - Cortar share   |                                      |
+|                    |                                      |
+| SISTEMA            |                                      |
+|   - Ativar Windows |                                      |
+|   - Calor/bateria  |                                      |
+|   - Energia/clock  |                                      |
+|   - Reparar Boot   |                                      |
+|                    |                                      |
+| SEGURANCA          |                                      |
+|   - Rastreador     |                                      |
+|                    |                                      |
+| INTERNET/WIFI      |                                      |
+|   - Diagnostico    |                                      |
+|   - Otimizar rede  |                  [ EXECUTAR ACAO ]   |
+|                    |                                      |
++--------------------+--------------------------------------+
+| status: aguardando...                                     |
++-----------------------------------------------------------+</div>
 
 <!-- ============================= -->
 <h2>3. Sumario das Acoes</h2>
@@ -130,11 +151,13 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li><a href="#helpcmds">Comandos GCintra00 (cheat sheet)</a></li>
 <li><a href="#smart">S.M.A.R.T. (Saude do disco)</a></li>
 <li><a href="#info">Informacoes detalhadas</a></li>
+<li><a href="#overview">Visao geral - todos os discos</a></li>
 <li><a href="#wipe">Apagar e formatar (Wipe & Format)</a></li>
 <li><a href="#label">Trocar label do volume</a></li>
 <li><a href="#letter">Trocar letra de drive</a></li>
 <li><a href="#resize">Redimensionar particao</a></li>
 <li><a href="#format">Formatar com escolha de FS</a></li>
+<li><a href="#uti">UTI do Windows (limpeza + reparo profundo)</a></li>
 <li><a href="#chkdsk">CHKDSK</a></li>
 <li><a href="#defrag">Desfragmentar / Otimizar</a></li>
 <li><a href="#wipefree">Limpar espaco livre</a></li>
@@ -146,7 +169,13 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li><a href="#createuser">Criar novo usuario local</a></li>
 <li><a href="#share">Compartilhar pasta na rede (SMB)</a></li>
 <li><a href="#listshares">Listar compartilhamentos ativos</a></li>
+<li><a href="#activate">Ativar Windows (licenca da placa-mae)</a></li>
+<li><a href="#termico">Calor e bateria (temperatura + throttling)</a></li>
+<li><a href="#energia">Energia / clock da CPU</a></li>
 <li><a href="#repairboot">Reparar Boot / Sistema (DISM + SFC)</a></li>
+<li><a href="#rastreador">Rastreador de acessos remotos</a></li>
+<li><a href="#netdiag">Diagnostico de conexao (WiFi + ping)</a></li>
+<li><a href="#netopt">Otimizar rede (placa WiFi + DNS)</a></li>
 </ul>
 </div>
 
@@ -209,6 +238,19 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 </ul>
 </div>
 
+<div class="action-card" id="overview">
+<div class="action-title">Visao geral - todos os discos <span class="tag tag-safe">leitura</span></div>
+<p class="action-desc">Lista TODOS os discos de uma vez numa tabela, em vez de um por um. Responde num olhar as duas perguntas de sempre: "qual disco e qual" e "qual SSD esta mais gasto".</p>
+<h4>Colunas</h4>
+<ul class="action-fields">
+<li><strong>Disk / Modelo / Tipo:</strong> numero do disco, modelo e HDD / SSD / NVMe</li>
+<li><strong>Saude:</strong> o que o firmware reporta (OK / Warning / Critical)</li>
+<li><strong>Vida util:</strong> desgaste traduzido em faixa - excelente, saudavel, moderado, desgaste alto, critico</li>
+<li><strong>Letras:</strong> as letras de drive que aquele disco carrega</li>
+</ul>
+<div class="info">Clique <strong>Executar Acao</strong> pra atualizar a tabela (ela nao fica se atualizando sozinha).</div>
+</div>
+
 <!-- ============================= -->
 <h2>5. PARTICAO <span class="tag tag-part">acoes destrutivas</span></h2>
 <!-- ============================= -->
@@ -269,6 +311,26 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <!-- ============================= -->
 <h2>6. MANUTENCAO <span class="tag tag-maint">otimizacao</span></h2>
 <!-- ============================= -->
+
+<div class="action-card" id="uti">
+<div class="action-title">UTI do Windows (limpeza + reparo profundo) <span class="tag tag-maint">reparo</span> <span class="tag tag-info">janela propria</span></div>
+<p class="action-desc">Para o PC <strong>travado ou iniciando mal</strong> - o caso em que nao adianta olhar disco: e o Windows que precisa de terapia intensiva. Abre em uma janela PowerShell propria (elevada) e roda o <code>uti-v6.ps1</code> direto do repo <code>limpeza</code>.</p>
+<h4>O que faz, em ordem</h4>
+<ul class="action-fields">
+<li><strong>Mata todos os apps abertos</strong> - preservando o acesso remoto (AnyDesk nao cai no meio do atendimento)</li>
+<li><strong>Desintoxica a inicializacao</strong> (Steam e cia), com <strong>backup no Desktop</strong> do que foi tirado</li>
+<li><strong>Limpa</strong> temp, caches, lixeira e o cache do Windows Update</li>
+<li><strong>Rede:</strong> flush DNS + winsock reset</li>
+<li><strong>Bateria DISM completa + SFC na ordem certa</strong> (DISM antes, porque e a fonte de onde o SFC puxa arquivo bom)</li>
+<li><strong>CHKDSK e defrag</strong> pra fechar</li>
+</ul>
+<h4>Modos (ele pergunta na largada)</h4>
+<ul class="action-fields">
+<li><strong>[1] Watchdog:</strong> limite de tempo por etapa - pra PC que trava e nao pode ficar a noite toda numa etapa</li>
+<li><strong>[2] Log completo:</strong> pericia, sem limite de tempo, registra tudo</li>
+</ul>
+<div class="aviso"><strong>REINICIAR o PC ao final.</strong> Log e backups ficam em <code>Desktop\UTI-backup</code>. Depois do reboot, rodar o POS-UTI (esta no cheat sheet).</div>
+</div>
 
 <div class="action-card" id="chkdsk">
 <div class="action-title">Checagem de integridade (CHKDSK) <span class="tag tag-safe">seguro</span></div>
@@ -495,6 +557,75 @@ ACESSO DE OUTRAS MAQUINAS WINDOWS:
 <h2>8.7. SISTEMA <span class="tag tag-maint">reparo</span></h2>
 <!-- ============================= -->
 
+<div class="action-card" id="activate">
+<div class="action-title">Ativar Windows (licenca da placa-mae) <span class="tag tag-safe">leitura</span> <span class="tag tag-maint">opcional: reativa</span></div>
+<p class="action-desc">Le a chave OEM gravada no <strong>firmware da placa-mae</strong> (tabela MSDM) - a licenca que <strong>ja veio comprada com o PC</strong>. Serve pra responder "esse Windows esta ativado?" e pra reativar depois de reinstalar, sem procurar chave em lugar nenhum.</p>
+<h4>O que mostra</h4>
+<ul class="action-fields">
+<li><strong>Status de ativacao</strong> e a chave OEM lida do firmware</li>
+<li><strong>Tipo de licenca:</strong> OEM / Retail / Volume / KMS</li>
+<li><strong>Validade:</strong> OEM e Retail sao permanentes (sem expiracao); KMS renova periodicamente</li>
+</ul>
+<h4>Opcao</h4>
+<ul class="action-fields">
+<li><strong>Forcar reativacao:</strong> instala a chave OEM e ativa. Util apos reinstalar o Windows.</li>
+</ul>
+<div class="info">Placa sem licenca embutida (PC montado, ou Windows comprado avulso) nao tem MSDM - nesse caso ele avisa em vez de fingir que achou.</div>
+</div>
+
+<div class="action-card" id="termico">
+<div class="action-title">Calor e bateria (temperatura + throttling) <span class="tag tag-safe">so leitura</span></div>
+<p class="action-desc">Responde <strong>"esse PC esquenta de mais?"</strong> com numero em vez de achismo. A regra que rege o laudo: <strong>a temperatura sozinha nao diz nada - o que diz e a temperatura CRUZADA com a carga</strong>. 74 C com a CPU quase parada e problema (deveria estar em 45-55 C); os mesmos 74 C sob carga de 80% sao normais.</p>
+<h4>O que mede</h4>
+<ul class="action-fields">
+<li><strong>Temperatura ACPI</strong> por zona + o ponto em que o PC desliga sozinho</li>
+<li><strong>Clock em % do nominal</strong> junto com a carga - pra ver se a CPU esta sendo freada</li>
+<li><strong>Eventos de firmware</strong> <code>Kernel-Processor-Power</code> 37/38/55: CPU limitada pelo firmware. Aponta <strong>BIOS velha</strong> antes de apontar poeira ou pasta termica</li>
+<li><strong>WHEA-Logger:</strong> erro de HARDWARE. Se cair no mesmo minuto de um desligamento, e conversa de garantia, nao de software</li>
+<li><strong>Desligamentos sujos</strong> agrupados <strong>por minuto</strong>, com o <code>BugcheckCode</code> que separa tela azul (driver) de queda seca (energia/calor/hardware), + minidumps</li>
+<li><strong>Saude real da bateria:</strong> capacidade atual sobre a de fabrica + ciclos</li>
+<li><strong>Top 5 processos</strong> comendo CPU agora</li>
+</ul>
+<h4>Opcao</h4>
+<ul class="action-fields">
+<li><strong>Relatorio de bateria (HTML no Desktop):</strong> o <code>powercfg /batteryreport</code>, pra comparar capacidade de projeto x carga total</li>
+</ul>
+<div class="info">Termina com um <strong>VEREDITO por escrito</strong> e a saida ja sai marcada pra colar numa IA. Muitos notebooks <strong>nao expoem</strong> temperatura por ACPI - nesses, medir com HWiNFO64 portable (aba Sensors).</div>
+</div>
+
+<div class="action-card" id="energia">
+<div class="action-title">Energia / clock da CPU (PC lento a 0,4 GHz) <span class="tag tag-maint">mede e corrige</span></div>
+<p class="action-desc">Para <strong>"o PC esta lento sem motivo"</strong>. A frase que organiza tudo aqui: <strong>clock baixo nao e sintoma; clock que NAO SOBE e</strong>. Nucleo ocioso a 0,4 GHz e normal - o defeito e nao passar disso nem sob carga.</p>
+<div class="aviso"><strong>Nao confie no Gerenciador de Tarefas:</strong> a % dele e relativa ao clock <em>atual</em>, entao 86% num clock de 0,2 GHz parece CPU cheia quando a maquina esta ociosa e travada. Aqui tudo e medido em <code>PercentProcessorPerformance</code> (% do clock nominal). O <code>Win32_Processor.CurrentClockSpeed</code> mente (espelha o maximo) e nao e usado.</div>
+<h4>1. Mede</h4>
+<ul class="action-fields">
+<li><strong>Ocioso</strong> e depois <strong>sob carga</strong>: poe carga em todos os nucleos por ~10 s e registra o PICO. E o teste que decide.</li>
+<li>O progresso aparece na barra de status segundo a segundo (a janela nao trava).</li>
+</ul>
+<h4>2. Mostra como a energia esta</h4>
+<ul class="action-fields">
+<li><strong>Teto e piso do processador</strong> em AC e bateria - o teto que a interface do Win 11 esconde e a causa mais comum</li>
+<li><strong>Turbo</strong> (boost), <strong>limiar da economia de energia</strong>, <strong>slider de desempenho</strong> e <strong>Power Throttling</strong></li>
+<li><strong>Politica por GPO/registro</strong> impondo teto - o <code>powercfg</code> NAO vence isso, e o laudo entrega o comando pra remover</li>
+<li><strong>Gerenciador de energia do fabricante</strong> rodando (Vantage, DPTF, Dell Power Manager) - pode sobrepor o Windows</li>
+</ul>
+<h4>3. Libera (caixa "Liberar a energia", com confirmacao)</h4>
+<ul class="action-fields">
+<li>Teto do processador em <strong>100%</strong> e piso em 5%, em AC <strong>e</strong> bateria</li>
+<li>Turbo em modo agressivo; plano "Economia de energia" volta pro <strong>Equilibrado</strong></li>
+<li>Economia de energia do Win 11 <strong>nunca liga sozinha</strong> (limiar 0%)</li>
+<li>Slider em <strong>Melhor desempenho</strong> + <code>PowerThrottlingOff=1</code></li>
+</ul>
+<h4>4. Mede de novo e da o veredito</h4>
+<ul class="action-fields">
+<li><strong>Subiu para 80%+:</strong> a CPU nao esta presa. Se subiu <em>depois</em> das correcoes, <strong>era configuracao de energia</strong> - caso resolvido. Se ja subia antes, a lentidao nao e clock: olhar disco (S.M.A.R.T.), RAM, antivirus, startup.</li>
+<li><strong>50-80%:</strong> cheira a limite termico/firmware - BIOS nova pelo <strong>machine type</strong> (nao pelo Vantage/SupportAssist) e rodar "Calor e bateria".</li>
+<li><strong>Abaixo de 50% com a energia toda liberada:</strong> energia descartada. Arvore: BIOS -&gt; bateria -&gt; modo termico do fabricante (IdeaPad = Fn+Q) -&gt; reset de EC (no IdeaPad e o <strong>furinho</strong> Novo/reset na base, 10 s com clipe - nao e segurar o power) -&gt; prova final bootando Linux live e lendo <code>grep cpu.MHz /proc/cpuinfo</code>: preso la tambem = placa/firmware, Windows inocente, conversa de garantia.</li>
+</ul>
+<div class="info"><strong>Sem carga valida nao ha veredito.</strong> Se o uso de CPU nao subir durante o teste (Start-Job bloqueado por politica, contador quebrado), ele diz que o teste nao valeu em vez de sentenciar "CPU presa" a toa.</div>
+<div class="sucesso"><strong>Tudo reversivel</strong> e vale na hora, sem reiniciar. Desmarque "Liberar a energia" pra so medir. Em notebook, liberar tudo pode esquentar e gastar mais bateria. Existe tambem a versao avulsa fora do canivete: <code>irm https://raw.githubusercontent.com/GCintra00/limpeza/master/energia.ps1 | iex</code>.</div>
+</div>
+
 <div class="action-card" id="repairboot">
 <div class="action-title">Reparar Boot / Sistema (DISM + SFC) <span class="tag tag-safe">seguro</span></div>
 <p class="action-desc">Reparo <strong>ONLINE</strong> (com o Windows aberto): roda <code>DISM /Online /Cleanup-Image /RestoreHealth</code> e depois <code>sfc /scannow</code>, le e resume o <code>SrtTrail.txt</code> (o log da tela "seu dispositivo encontrou um problema e nao pode ser reparado"), e salva um <code>.log</code> no Desktop pra voce enviar.</p>
@@ -512,6 +643,58 @@ ACESSO DE OUTRAS MAQUINAS WINDOWS:
 </ul>
 <div class="info">Nao inclui <code>bootrec</code>/<code>bcdboot</code>: esses so funcionam no Ambiente de Recuperacao (WinRE), nao com o Windows aberto. Quando forem necessarios, o proprio log avisa e mostra os comandos.</div>
 <div class="aviso"><strong>DISM precisa de internet:</strong> em Win10 antigos com problema de TLS pode falhar - nesse caso desmarque o DISM e rode so o SFC, ou aponte uma fonte <code>install.wim</code>. O erro do DISM e registrado sem travar o resto.</div>
+</div>
+
+<!-- ============================= -->
+<h2>8.8. SEGURANCA <span class="tag tag-user">investigacao</span></h2>
+<!-- ============================= -->
+
+<div class="action-card" id="rastreador">
+<div class="action-title">Rastreador de acessos remotos <span class="tag tag-safe">so leitura</span> <span class="tag tag-info">janela propria</span></div>
+<p class="action-desc">Responde <strong>"quem pode entrar nesta maquina de fora?"</strong>. Nao altera e nao remove nada - e vistoria, nao faxina. Abre em janela propria e roda o <code>rastreador-acessos-remotos.ps1</code> do repo <code>formatei-pc</code>.</p>
+<h4>O que procura</h4>
+<ul class="action-fields">
+<li><strong>Acesso remoto e RMM instalados:</strong> AnyDesk, TeamViewer, ScreenConnect, Atera, RustDesk, Action1 e ~25 outros</li>
+<li><strong>Servico ou tarefa agendada</strong> rodando de lugar incomum (pasta de usuario, temp)</li>
+<li><strong>AnyDesk com senha fixa</strong> - entra sem ninguem aceitar do outro lado</li>
+<li><strong>RDP habilitado</strong></li>
+<li><strong>Quem assinou cada binario</strong> - "alterado depois de assinado" nunca e normal</li>
+</ul>
+<h4>Saida</h4>
+<ul class="action-fields">
+<li>TXT no Desktop (<code>acessos-remotos-USUARIO-PC-data.txt</code>) pronto pra ler na mao <strong>ou</strong> pra colar em qualquer IA: o arquivo leva as instrucoes e um bloco JSON dentro.</li>
+<li>Veredito: <strong>ACHADO</strong> / <strong>REVISAR</strong> / <strong>LIMPO</strong>. Fala PT, ES ou EN conforme o idioma do Windows.</li>
+</ul>
+<div class="aviso"><strong>Se der ACHADO, nao desinstale nada:</strong> a maquina e a prova. Guardar o TXT primeiro.</div>
+<div class="info">Com admin ele ve mais (servicos e tarefas de outros perfis). A versao da empresa se chama <code>verificar-action1.ps1</code> - nome que casa com o tutorial do Accounting; nao renomear.</div>
+</div>
+
+<!-- ============================= -->
+<h2>8.9. INTERNET / WIFI <span class="tag tag-info">diagnostico + ajuste</span></h2>
+<!-- ============================= -->
+
+<div class="action-card" id="netdiag">
+<div class="action-title">Diagnostico de conexao (WiFi + ping) <span class="tag tag-safe">so leitura</span></div>
+<p class="action-desc">Diz <strong>de quem e a lentidao</strong>: do seu PC/WiFi, do roteador ou do provedor. Resumo no topo, detalhes embaixo.</p>
+<h4>O que mede</h4>
+<ul class="action-fields">
+<li><strong>WiFi:</strong> sinal, banda (2.4 / 5 GHz), radio e canal - e deduz a banda pelo canal nas placas que nao reportam (ex.: AX210)</li>
+<li><strong>Ping no roteador</strong> (o primeiro salto) e <strong>na internet</strong> (8.8.8.8): perda e latencia media de cada um</li>
+<li><strong>Teste de velocidade</strong> opcional: baixa ~20 MB do Cloudflare pra medir throughput real</li>
+</ul>
+<div class="info">Perda alta ja no roteador = problema local (WiFi/placa/roteador). Roteador limpo e internet ruim = provedor.</div>
+</div>
+
+<div class="action-card" id="netopt">
+<div class="action-title">Otimizar rede (placa WiFi + DNS) <span class="tag tag-maint">aplica ajustes</span></div>
+<p class="action-desc">Aplica so ajustes <strong>seguros</strong> do lado do PC - marque o que quer e clique Executar.</p>
+<h4>Opcoes</h4>
+<ul class="action-fields">
+<li><strong>Desligar a economia de energia da placa WiFi</strong> (marcado): causa classica de lentidao e queda de conexao</li>
+<li><strong>Limpar o cache DNS</strong> (marcado)</li>
+<li><strong>DNS rapido 8.8.8.8 / 1.1.1.1</strong> (desmarcado): <strong>NAO usar em PC corporativo</strong> com DNS interno - quebra o acesso aos recursos da rede</li>
+</ul>
+<div class="info">Nao mexe em TCP nem em winsock de proposito: os "tweaks" de registro que circulam por ai sao mito e arriscados.</div>
 </div>
 
 <!-- ============================= -->
@@ -585,7 +768,7 @@ ACESSO DE OUTRAS MAQUINAS WINDOWS:
 <p>Sim, em Windows 10 e Windows 11. Versoes mais antigas (Win 7/8) podem nao ter os cmdlets necessarios.</p>
 
 <h3>O script muda algo no sistema sem eu pedir?</h3>
-<p>Nao. Cada acao so executa quando voce clica em <strong>Executar Acao</strong>. As acoes destrutivas ainda pedem confirmacao adicional.</p>
+<p>Nao. Cada acao so executa quando voce clica em <strong>Executar Acao</strong>, e as destrutivas pedem confirmacao adicional. As acoes que <strong>alteram configuracao</strong> (Energia / clock da CPU, Otimizar rede, Ativar Windows com "forcar reativacao", UTI) tambem avisam antes - e Energia, Otimizar rede e UTI tem caixa pra desmarcar o que voce nao quer. As de leitura (S.M.A.R.T., Informacoes, Visao geral, Calor e bateria, Diagnostico de conexao, Rastreador) nao mudam nada.</p>
 
 <h3>Da pra desfazer um Wipe & Format?</h3>
 <p>Nao. Apos formatar, dados podem ser parcialmente recuperaveis com forensica especializada, mas pra uso pratico considere perdido. Por isso a confirmacao dupla.</p>
@@ -597,7 +780,7 @@ ACESSO DE OUTRAS MAQUINAS WINDOWS:
 <p>Provavelmente sim, mas nao foi testado. Os cmdlets usados sao nativos do PowerShell e funcionam em todas arquiteturas. Disk2VHD pode ser exclusivamente x64.</p>
 
 <h3>Algum dado e enviado pra internet?</h3>
-<p>Nao. Tudo roda local. As unicas conexoes de rede sao: (1) download inicial do script via <code>irm</code>, (2) download do Disk2VHD na primeira execucao da acao VHDX. Nenhum dado de disco ou usuario sai do PC.</p>
+<p>Nao. Tudo roda local. As conexoes de rede sao: (1) download inicial do script via <code>irm</code>, (2) download do Disk2VHD na primeira execucao da acao VHDX, (3) as acoes <strong>UTI do Windows</strong> e <strong>Rastreador</strong>, que baixam o proprio script do GitHub pra rodar em janela propria, (4) o DISM da UTI, que puxa arquivo bom do Windows Update, e (5) o teste de velocidade opcional do diagnostico de rede (~20 MB do Cloudflare). <strong>Nenhum dado de disco, laudo ou usuario sai do PC</strong> - os logs ficam no Desktop.</p>
 
 <hr>
 
