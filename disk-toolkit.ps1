@@ -375,6 +375,173 @@ function Get-TermicoLinhas {
     return $L
 }
 
+# ============= ENERGIA / CLOCK DA CPU (mede -> libera -> mede) =============
+# Nasceu do PC parado em 0,44 GHz: clock BAIXO nao e' sintoma, clock que NAO SOBE e'.
+# O % do Gerenciador de Tarefas engana (e' relativo ao clock ATUAL), por isso aqui
+# tudo e' medido em PercentProcessorPerformance (% do clock nominal).
+$script:EN = @{
+    SubProc  = '54533251-82be-4824-96c1-47b60b740d00'   # gerenciamento de energia do processador
+    ThrotMax = 'bc5038f7-23e0-4960-96da-33abaf5935ec'   # estado maximo do processador (o teto que a UI do Win11 esconde)
+    ThrotMin = '893dee8e-2bef-41e0-89c6-b55d0929964c'   # estado minimo
+    Boost    = 'be337238-0d82-4146-a960-4f3749d470c7'   # turbo
+    SubSaver = 'de830923-a562-41af-a086-e3a2c6bad2da'   # economia de energia (Win11)
+    EsThresh = 'e69653ca-cf7f-4f05-aa73-cb833fa90ad4'   # em que % de carga ela liga sozinha
+    OvlPerf  = 'ded574b5-45a0-4f42-8737-46345c09c238'   # slider "Melhor desempenho"
+    OvlEfic  = '961cc777-2547-4f9d-8174-7d86181b8a7a'   # slider "Melhor eficiencia" (freia a CPU)
+    Bal      = '381b4222-f694-41f0-9685-ff5bb260df2e'   # plano Equilibrado
+    Saver    = 'a1841308-3541-4fab-bc81-f71556f20b4a'   # plano Economia de energia
+}
+
+function Invoke-Powercfg {
+    param([string[]]$Args1)
+    try { return ((& "$env:SystemRoot\System32\powercfg.exe" @Args1 2>&1) -join "`n") } catch { return '' }
+}
+
+function Get-PowercfgHex2($texto) {
+    # PEGADINHA: o /q imprime "valor minimo/maximo possivel" ANTES do indice de CA/CC.
+    # Os indices AC e DC sao os DOIS ULTIMOS hex - assim vale em PT, ES e EN.
+    $m = @([regex]::Matches("$texto", '0x[0-9a-fA-F]{8}') | ForEach-Object { [Convert]::ToInt32($_.Value, 16) })
+    if ($m.Count -ge 2) { return @($m[$m.Count - 2], $m[$m.Count - 1]) }
+    return @(-1, -1)
+}
+
+function Get-EnergiaValor($subGuid, $setGuid) {
+    return (Get-PowercfgHex2 (Invoke-Powercfg @('/q', 'SCHEME_CURRENT', $subGuid, $setGuid)))
+}
+
+function Get-ClockAgora {
+    try {
+        $p = Get-CimInstance Win32_PerfFormattedData_Counters_ProcessorInformation -ErrorAction Stop | Where-Object Name -eq '_Total'
+        if ($p) { return @{ Perf = [double]$p.PercentProcessorPerformance; Uso = [double]$p.PercentProcessorTime } }
+    } catch {}
+    try {
+        $c = Get-Counter '\Processor Information(_Total)\% of Maximum Frequency' -ErrorAction Stop
+        if ($c) { return @{ Perf = [double]$c.CounterSamples[0].CookedValue; Uso = -1 } }
+    } catch {}
+    return $null
+}
+
+function Get-ClockGhz($perf) {
+    $mhz = 0
+    try { $mhz = (Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1).MaxClockSpeed } catch {}
+    if ($mhz -gt 0) { return [math]::Round(($mhz * $perf / 100) / 1000, 2) }
+    return 0
+}
+
+function Test-CargaClock {
+    # Poe carga em todos os nucleos e devolve o MAIOR clock visto. E' o teste que separa
+    # "ocioso a 0,4 GHz" (normal) de "PRESO a 0,4 GHz" (defeito): sob carga tem que subir.
+    param([int]$Segundos = 10, [string]$Rotulo = '')
+    $n = [int]$env:NUMBER_OF_PROCESSORS; if ($n -lt 1) { $n = 2 }
+    $jobs = @()
+    for ($i = 0; $i -lt $n; $i++) {
+        $jobs += Start-Job -ScriptBlock { param($s) $fim = (Get-Date).AddSeconds($s); $x = 1.0; while ((Get-Date) -lt $fim) { $x = [math]::Sqrt($x + 1.234567) } } -ArgumentList ($Segundos + 3)
+    }
+    Start-Sleep -Seconds 3
+    $picoPerf = 0.0; $picoUso = 0.0
+    for ($i = 1; $i -le $Segundos; $i++) {
+        $m = Get-ClockAgora
+        if ($m) {
+            if ($m.Perf -gt $picoPerf) { $picoPerf = $m.Perf }
+            if ($m.Uso  -gt $picoUso)  { $picoUso  = $m.Uso }
+        }
+        Set-Status ("Carga $Rotulo em $n nucleos... ${i}/$Segundos s | pico {0}% do nominal" -f [math]::Round($picoPerf)) ([System.Drawing.Color]::DarkOrange)
+        Start-Sleep -Seconds 1
+    }
+    $jobs | Stop-Job -ErrorAction SilentlyContinue
+    $jobs | Remove-Job -Force -ErrorAction SilentlyContinue
+    return @{ Perf = $picoPerf; Uso = $picoUso }
+}
+
+function Get-EnergiaConfigLinhas {
+    $L = New-Object System.Collections.ArrayList
+    function A($t) { [void]$L.Add($t) }
+
+    $plano = Invoke-Powercfg @('/getactivescheme')
+    A ("Plano ativo: " + (($plano -replace '\s+', ' ').Trim()))
+
+    $t = Get-EnergiaValor $script:EN.SubProc $script:EN.ThrotMax
+    $fl = if ($t[0] -ge 100 -and $t[1] -ge 100) { '' } else { ' <- TETO BAIXO: e a causa mais comum, a UI do Win11 esconde isso' }
+    A ("Teto do processador: AC {0}% | bateria {1}%{2}" -f $t[0], $t[1], $fl)
+
+    $mn = Get-EnergiaValor $script:EN.SubProc $script:EN.ThrotMin
+    if ($mn[0] -ge 0) { A ("Piso do processador: AC {0}% | bateria {1}%" -f $mn[0], $mn[1]) }
+
+    $bo = Get-EnergiaValor $script:EN.SubProc $script:EN.Boost
+    if ($bo[0] -ge 0) {
+        $fl = if ($bo[0] -eq 0) { ' <- TURBO DESLIGADO' } else { '' }
+        A ("Turbo (boost): AC {0} | bateria {1}{2}" -f $bo[0], $bo[1], $fl)
+    }
+
+    $es = Get-EnergiaValor $script:EN.SubSaver $script:EN.EsThresh
+    if ($es[0] -ge 0) { A ("Economia de energia liga em: AC {0}% | bateria {1}% de carga (0 = nunca sozinha)" -f $es[0], $es[1]) }
+
+    $ovl = $null
+    try { $ovl = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes' -Name ActiveOverlayAcPowerScheme -ErrorAction Stop).ActiveOverlayAcPowerScheme } catch {}
+    $nomeOvl = switch ("$ovl") {
+        $script:EN.OvlPerf { 'Melhor desempenho' }
+        $script:EN.OvlEfic { 'Melhor eficiencia <- FREIA A CPU' }
+        ''                 { 'recomendado/equilibrado' }
+        default            { "$ovl" }
+    }
+    A ("Slider de desempenho (overlay): $nomeOvl")
+
+    $pt = 'ausente (= ligado, padrao do Windows)'
+    try { $pt = "$((Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling' -Name PowerThrottlingOff -ErrorAction Stop).PowerThrottlingOff)" } catch {}
+    A ("Power Throttling (freio de apps em 2o plano): PowerThrottlingOff = $pt")
+
+    $gpo = "HKLM:\SOFTWARE\Policies\Microsoft\Power\PowerSettings\$($script:EN.ThrotMax)"
+    if (Test-Path $gpo) {
+        A 'POLITICA (GPO/registro) impondo teto de CPU <- powercfg NAO vence isso; remover a chave e reiniciar:'
+        A "  Remove-Item '$gpo' -Recurse -Force"
+    } else { A 'Politica de energia forcada por GPO/registro: nenhuma (bom)' }
+
+    try {
+        $mgr = @(Get-Service -ErrorAction Stop | Where-Object { $_.Status -eq 'Running' -and ($_.DisplayName -match 'Lenovo|Vantage|Intelligent|Dell|Power Manager|ASUS|Armoury|MyASUS|Dynamic Platform|DPTF' -or $_.Name -match 'esif|dptf|LenovoVantage|DellPower') })
+        if ($mgr.Count -gt 0) {
+            A ("Gerenciador de energia do FABRICANTE ativo ({0}) <- pode sobrepor o Windows:" -f $mgr.Count)
+            $mgr | Select-Object -First 5 | ForEach-Object { A ("  {0} ({1})" -f $_.DisplayName, $_.Name) }
+        } else { A 'Gerenciador de energia de fabricante: nenhum rodando' }
+    } catch { A 'Gerenciador de energia de fabricante: NAO VERIFICADO (Get-Service falhou aqui)' }
+
+    return $L
+}
+
+function Set-EnergiaLiberada {
+    # Tudo reversivel e vale na hora, sem reiniciar.
+    $L = New-Object System.Collections.ArrayList
+    function A($t) { [void]$L.Add($t) }
+    $E = $script:EN
+
+    $plano = Invoke-Powercfg @('/getactivescheme')
+    if ($plano -match $E.Saver) {
+        Invoke-Powercfg @('/setactive', $E.Bal) | Out-Null
+        A 'plano "Economia de energia" -> "Equilibrado"'
+    }
+    foreach ($fonte in @('/setacvalueindex', '/setdcvalueindex')) {
+        Invoke-Powercfg @($fonte, 'SCHEME_CURRENT', $E.SubProc,  $E.ThrotMax, '100') | Out-Null
+        Invoke-Powercfg @($fonte, 'SCHEME_CURRENT', $E.SubProc,  $E.ThrotMin, '5')   | Out-Null
+        Invoke-Powercfg @($fonte, 'SCHEME_CURRENT', $E.SubProc,  $E.Boost,    '2')   | Out-Null
+        Invoke-Powercfg @($fonte, 'SCHEME_CURRENT', $E.SubSaver, $E.EsThresh, '0')   | Out-Null
+    }
+    A 'teto do processador em 100% e piso em 5% (AC e bateria)'
+    A 'turbo (boost) em modo agressivo'
+    A 'economia de energia automatica desligada (limiar 0%)'
+    Invoke-Powercfg @('/setactive', 'SCHEME_CURRENT') | Out-Null   # sem isto nada vale
+
+    $r = Invoke-Powercfg @('/overlaysetactive', $script:EN.OvlPerf)
+    if ($r -notmatch 'nvalid|rro') { A 'slider de desempenho em "Melhor desempenho"' }
+
+    try {
+        $k = 'HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling'
+        if (-not (Test-Path $k)) { New-Item $k -Force | Out-Null }
+        New-ItemProperty $k -Name PowerThrottlingOff -Value 1 -PropertyType DWord -Force | Out-Null
+        A 'Power Throttling desligado (PowerThrottlingOff=1)'
+    } catch { A "Power Throttling: falhou ($($_.Exception.Message))" }
+
+    return $L
+}
+
 # ============= Cataloog de acoes =============
 # Estrutura: nome interno, nome amigavel, categoria, descricao, funcao a chamar
 
@@ -417,6 +584,7 @@ $script:actions = @(
     # === SISTEMA ===
     @{Id='activate'; Name='Ativar Windows (licenca da placa-mae)'; Cat='SISTEMA'; Desc='Le a chave OEM gravada no firmware da placa-mae (tabela MSDM) - a licenca que JA veio comprada com o PC - e mostra o status de ativacao, o tipo de licenca (OEM/Retail/Volume/KMS) e a validade (OEM/Retail = permanente, sem expiracao). Marque "Forcar reativacao" pra instalar a chave OEM e reativar (util apos reinstalar o Windows). Nao funciona em placa sem licenca embutida (avisa).'},
     @{Id='termico'; Name='Calor e bateria (temperatura + throttling)'; Cat='SISTEMA'; Desc='So leitura, nao muda nada. Responde "esta esquentando de mais?" com numero em vez de achismo: temperatura ACPI cruzada com a carga da CPU (74 C parado e problema, 74 C sob carga nao), clock em % do nominal pra ver se a CPU esta sendo freada, eventos de firmware limitando a CPU (37/38/55 - quase sempre BIOS velha), erro de hardware WHEA, desligamentos sujos com o BugcheckCode que separa tela azul de queda seca, minidumps, saude real da bateria (capacidade atual x de fabrica + ciclos) e quem esta comendo CPU. Da um VEREDITO por escrito. Opcional: relatorio de bateria em HTML no Desktop.'},
+    @{Id='energia'; Name='Energia / clock da CPU (PC lento a 0,4 GHz)'; Cat='SISTEMA'; Desc='Para "o PC esta lento sem motivo": mede o clock REAL em % do nominal (o % do Gerenciador de Tarefas engana, e relativo ao clock atual), poe CARGA em todos os nucleos e ve se o clock SOBE - clock baixo nao e sintoma, clock que NAO SOBE e. Mostra como a energia esta: teto e piso do processador em AC e bateria (o teto que a UI do Win11 esconde), turbo, limiar da economia de energia, slider de desempenho, power throttling, politica por GPO e gerenciador do fabricante. Se "Liberar a energia" estiver marcado, aplica as correcoes (teto 100%, piso 5%, turbo agressivo, economia de energia so manual, plano Equilibrado, slider em Melhor desempenho, PowerThrottlingOff) e MEDE DE NOVO, dando o veredito: era configuracao, e limite termico/firmware, ou a CPU esta presa e a conversa passa a ser BIOS/EC/garantia. Tudo reversivel, vale na hora sem reiniciar. Opcional: log no Desktop.'},
     @{Id='repairboot'; Name='Reparar Boot / Sistema (DISM + SFC)'; Cat='SISTEMA'; Desc='Reparo ONLINE (com o Windows aberto): roda DISM /RestoreHealth (conserta a imagem do sistema, a "fonte" que o SFC usa) e depois SFC /scannow (conserta arquivos protegidos do Windows), le e resume o SrtTrail.txt (o log da tela "nao foi possivel reparar"), e SALVA um arquivo .log no Desktop com o RESULTADO DO SFC na primeira linha e o que ainda falta fazer. Nao roda bootrec/bcdboot (esses so funcionam no WinRE) - mas o log te diz se precisa ir pra la. Envie o .log gerado se precisar de ajuda.'},
 
     # === SEGURANCA ===
@@ -572,6 +740,7 @@ function Build-Panel($actionId) {
                 @{Name='Limpeza do Sistema'; Desc='cache, cookies, temp'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/limpeza.ps1 | iex'},
                 @{Name='UTI do Windows v6'; Desc='PC travado: mata apps + startup + DISM/SFC + disco (respirando por maquinas)'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/uti-v6.ps1 | iex'},
                 @{Name='Calor e bateria (termico)'; Desc='temperatura cruzada com a carga, throttling, evento de firmware, desligamento sujo, saude da bateria'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/termico.ps1 | iex'},
+                @{Name='Energia / clock da CPU'; Desc='PC lento a 0,4 GHz: mede ocioso e sob carga, libera a energia (teto/piso, turbo, economia, slider) e mede de novo'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/energia.ps1 | iex'},
                 @{Name='Rastreador de acessos remotos'; Desc='quem pode entrar de fora: RMM/acesso remoto + assinatura + RDP; TXT no Desktop pronto pra IA'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/rastreador-acessos-remotos.ps1 | iex'},
                                 @{Name='Corrigir DNS (Google 8.8.8.8)'; Desc='resolve DNS quebrado em PCs recem-formatados'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }'},
                 @{Name='Serial Number do PC'; Desc='mostra serial da BIOS (pra registro)'; Cmd='(Get-CimInstance Win32_BIOS).SerialNumber'},
@@ -1051,6 +1220,12 @@ function Build-Panel($actionId) {
             $script:ctx.batreport = Add-Checkbox 10 32 460 "Gerar relatorio de bateria (HTML no Desktop)" $false
             $script:ctx.output = Add-Multiline 10 58 460 212
         }
+        'energia' {
+            Add-Label 10 8 460 32 "Mede o clock ocioso e SOB CARGA (o PC fica lento uns 25 s), libera a energia e mede de novo." $true
+            $script:ctx.enFix = Add-Checkbox 10 44 460 "Liberar a energia (teto/piso, turbo, economia, slider) - desmarque p/ so medir" $true
+            $script:ctx.enLog = Add-Checkbox 10 67 460 "Salvar log no Desktop" $true
+            $script:ctx.output = Add-Multiline 10 94 460 176
+        }
         'netdiag' {
             Add-Label 10 8 460 22 "Clique Executar pra diagnosticar a conexao (so leitura)." $true
             $script:ctx.speedtest = Add-Checkbox 10 32 460 "Incluir teste de velocidade (baixa ~20 MB do Cloudflare)" $true
@@ -1126,6 +1301,7 @@ function Execute-Action($id) {
             'overview'   { Populate-Overview }
             'activate'   { Exec-Activate }
             'termico'    { Exec-Termico }
+            'energia'    { Exec-Energia }
             'netdiag'    { Exec-NetDiag }
             'netopt'     { Exec-NetOpt }
             'wipe'       { Exec-Wipe }
@@ -1593,6 +1769,92 @@ function Exec-Termico {
 
     Set-Output $out
     Set-Status "Medicao concluida" ([System.Drawing.Color]::DarkGreen)
+}
+
+function Exec-Energia {
+    $aplicar = ($script:ctx.enFix -and $script:ctx.enFix.Checked)
+    if ($aplicar) {
+        if (-not (Confirm-Action ("Liberar a energia desta maquina?`n`n" +
+            "- teto do processador em 100% e piso em 5% (AC e bateria)`n" +
+            "- turbo em modo agressivo`n" +
+            "- economia de energia so manual (nunca liga sozinha)`n" +
+            "- slider em Melhor desempenho + Power Throttling desligado`n`n" +
+            "Vale na hora, sem reiniciar, e e' tudo reversivel.`n" +
+            "Em notebook pode esquentar e gastar mais bateria."))) { $aplicar = $false }
+    }
+
+    $out = "=== Energia / clock da CPU - $(Get-Date -f 'dd/MM/yyyy HH:mm') ===`n"
+    try {
+        $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+        $cp = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
+        $bi = Get-CimInstance Win32_BIOS -ErrorAction Stop
+        $out += "$($cs.Manufacturer) $($cs.Model) | $($cp.Name) | nominal $($cp.MaxClockSpeed) MHz`n"
+        $out += ("BIOS: {0} de {1:dd/MM/yyyy}  <- conferir no site pelo machine type, nao pelo Vantage/SupportAssist`n" -f $bi.SMBIOSBIOSVersion, $bi.ReleaseDate)
+    } catch {}
+
+    Set-Status "Medindo o clock em repouso..." ([System.Drawing.Color]::DarkOrange)
+    $idle = Get-ClockAgora
+    if ($idle) { $out += ("`nANTES, ocioso: {0}% do nominal (~{1} GHz) | uso de CPU {2}%`n" -f [math]::Round($idle.Perf), (Get-ClockGhz $idle.Perf), [math]::Round($idle.Uso)) }
+    else       { $out += "`nANTES, ocioso: contador de clock indisponivel nesta maquina`n" }
+
+    $antes = Test-CargaClock -Segundos 10 -Rotulo 'ANTES'
+    $out += ("ANTES, sob carga: PICO {0}% do nominal (~{1} GHz) | uso de CPU chegou a {2}%`n" -f [math]::Round($antes.Perf), (Get-ClockGhz $antes.Perf), [math]::Round($antes.Uso))
+
+    Set-Status "Lendo a configuracao de energia..." ([System.Drawing.Color]::DarkOrange)
+    $out += "`n--- COMO A ENERGIA ESTA ---`n"
+    $out += ((Get-EnergiaConfigLinhas) -join "`n") + "`n"
+
+    $depois = $antes
+    if ($aplicar) {
+        Set-Status "Liberando a energia..." ([System.Drawing.Color]::DarkOrange)
+        $out += "`n--- CORRECOES APLICADAS ---`n"
+        $out += ((Set-EnergiaLiberada | ForEach-Object { "[OK] $_" }) -join "`n") + "`n"
+        Start-Sleep -Seconds 2
+        $depois = Test-CargaClock -Segundos 10 -Rotulo 'DEPOIS'
+        $out += ("`nDEPOIS, sob carga: PICO {0}% do nominal (~{1} GHz)`n" -f [math]::Round($depois.Perf), (Get-ClockGhz $depois.Perf))
+        $t = Get-EnergiaValor $script:EN.SubProc $script:EN.ThrotMax
+        $out += ("Teto do processador agora: AC {0}% | bateria {1}%`n" -f $t[0], $t[1])
+    } else {
+        $out += "`n(so medicao: a caixa 'Liberar a energia' estava desmarcada ou voce cancelou - nada foi alterado)`n"
+    }
+
+    # --- veredito ---
+    $out += "`n--- VEREDITO ---`n"
+    if ($depois.Uso -lt 50) {
+        $out += ("TESTE DE CARGA NAO VALEU: o uso de CPU so chegou a {0}% - a carga nao pegou`n" -f [math]::Round($depois.Uso))
+        $out += "(Start-Job bloqueado por politica, ou contador de CPU quebrado). Sem veredito de clock:`n"
+        $out += "repita com o PC na tomada, ou olhe a frequencia no Monitor de Recursos rodando algo pesado.`n"
+        if ($aplicar) { $out += "As correcoes de energia acima valem de qualquer forma.`n" }
+    } elseif ($depois.Perf -ge 80) {
+        $out += ("CPU SOBE NORMAL ({0}% do nominal sob carga). Nao esta presa.`n" -f [math]::Round($depois.Perf))
+        if ($aplicar -and $antes.Perf -lt 60) { $out += "E era CONFIGURACAO DE ENERGIA: subiu depois das correcoes. Caso resolvido.`n" }
+        else { $out += "Se o PC ainda esta lento, a causa NAO e' clock: olhar disco (S.M.A.R.T.), RAM, antivirus e startup.`n" }
+    } elseif ($depois.Perf -ge 50) {
+        $out += ("SOBE PARCIAL ({0}%). Cheira a limite termico/firmware:`n" -f [math]::Round($depois.Perf))
+        $out += "1) BIOS nova pelo site do fabricante usando o machine type acima`n"
+        $out += "2) rodar aqui a acao 'Calor e bateria' pra cruzar temperatura com carga`n"
+    } else {
+        $out += ("CPU PRESA: nao passa de {0}% do nominal nem sob carga.`n" -f [math]::Round($depois.Perf))
+        if ($aplicar) { $out += "Com a energia do Windows toda liberada -> energia DESCARTADA. Arvore de descarte:`n" }
+        else { $out += "Marque 'Liberar a energia' e rode de novo antes de culpar o hardware. Depois:`n" }
+        $out += "1) BIOS nova pelo machine type (evento 37 = firmware limitando)`n"
+        $out += "2) bateria: capacidade de projeto x carga total (acao 'Calor e bateria')`n"
+        $out += "3) modo termico do fabricante (IdeaPad = Fn+Q alterna 3 modos)`n"
+        $out += "4) reset de EC: no IdeaPad e' o FURINHO (Novo/reset) na base, 10 s com clipe - NAO e' segurar o power; depois BIOS -> Load Defaults`n"
+        $out += "5) prova final: bootar Linux live e rodar 'grep cpu.MHz /proc/cpuinfo'. Preso la tambem = placa/firmware, Windows inocente -> garantia`n"
+    }
+
+    if ($script:ctx.enLog -and $script:ctx.enLog.Checked) {
+        try {
+            $dst = Join-Path ([Environment]::GetFolderPath('Desktop')) ("energia_{0}_{1}.txt" -f $env:COMPUTERNAME, (Get-Date -f 'yyyy-MM-dd_HHmm'))
+            $out | Out-File $dst -Encoding utf8
+            $out += "`nLog salvo em: $dst"
+        } catch { $out += "`nNao consegui salvar o log: $($_.Exception.Message)" }
+    }
+    $out += "`n`n--- pode colar este texto numa IA pra interpretar ---"
+
+    Set-Output $out
+    Set-Status "Energia: medicao concluida" ([System.Drawing.Color]::DarkGreen)
 }
 
 function Exec-NetDiag {
