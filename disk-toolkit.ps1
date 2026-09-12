@@ -1848,7 +1848,7 @@ function Exec-Termico {
 
     $extra = ''
     if ($script:ctx.batreport -and $script:ctx.batreport.Checked) {
-        # -ErrorAction nao pega excecao .NET (WMI quebrado) — por isso o try/catch tambem.
+        # -ErrorAction nao pega excecao .NET (WMI quebrado); por isso o try/catch tambem.
         $temBat = $false
         try { $temBat = $null -ne (Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue) } catch { $temBat = $false }
         if (-not $temBat) {
