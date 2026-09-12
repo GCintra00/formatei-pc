@@ -51,7 +51,7 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <p><strong>Uso:</strong> Pessoal e profissional &nbsp;|&nbsp; <strong>Atualizado:</strong> Setembro 2026 &nbsp;|&nbsp; <strong>Repositorio:</strong> <a href="https://github.com/GCintra00/formatei-pc">github.com/GCintra00/formatei-pc</a></p>
 
 <div class="info">
-<strong>O que e:</strong> Ferramenta GUI (janela) com <strong>29 acoes em 10 categorias</strong> - o canivete suico de atendimento. Comecou so em disco (ver saude, formatar, copiar dados, apagar perfil antigo) e cresceu pra manutencao do PC inteiro: UTI do Windows, ativacao pela licenca da placa-mae, calor e bateria, energia/clock da CPU, reparo de boot, rastreador de acesso remoto e diagnostico de rede.
+<strong>O que e:</strong> Ferramenta GUI (janela) com <strong>30 acoes em 10 categorias</strong> - o canivete suico de atendimento. Comecou so em disco (ver saude, formatar, copiar dados, apagar perfil antigo) e cresceu pra manutencao do PC inteiro: UTI do Windows, ativacao pela licenca da placa-mae, calor e bateria, energia/clock da CPU, reparo de boot, rastreador de acesso remoto e diagnostico de rede.
 </div>
 
 <div class="aviso">
@@ -171,6 +171,7 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li><a href="#listshares">Listar compartilhamentos ativos</a></li>
 <li><a href="#activate">Ativar Windows (licenca da placa-mae)</a></li>
 <li><a href="#termico">Calor e bateria (temperatura + throttling)</a></li>
+<li><a href="#checkup">Checkup comparativo (antes x depois)</a></li>
 <li><a href="#energia">Energia / clock da CPU</a></li>
 <li><a href="#aer">PCIe: tempestade de erro corrigido (WHEA)</a></li>
 <li><a href="#repairboot">Reparar Boot / Sistema (DISM + SFC)</a></li>
@@ -593,6 +594,19 @@ ACESSO DE OUTRAS MAQUINAS WINDOWS:
 <li><strong>Relatorio de bateria (HTML no Desktop):</strong> o <code>powercfg /batteryreport</code>, pra comparar capacidade de projeto x carga total. Em <strong>desktop</strong> ele nem tenta e diz o porque - antes o <code>powercfg</code> falhava com <code>0x10d2</code> e o erro cru vazava pro log da UTI.</li>
 </ul>
 <div class="info">Termina com um <strong>VEREDITO por escrito</strong> e a saida ja sai marcada pra colar numa IA. Muitos notebooks <strong>nao expoem</strong> temperatura por ACPI - nesses, medir com HWiNFO64 portable (aba Sensors).</div>
+</div>
+
+<div class="action-card" id="checkup">
+<div class="action-title">Checkup comparativo (antes x depois) <span class="tag tag-safe">so leitura</span></div>
+<p class="action-desc">Responde <strong>"aquilo que eu mexi resolveu?"</strong>. Grava uma <strong>linha de base</strong> na primeira rodada e, nas seguintes, imprime o <strong>antes x depois</strong> sozinho - voce nao precisa guardar nada.</p>
+<h4>O que compara</h4>
+<ul class="action-fields">
+<li><strong>BIOS</strong> e <strong>memoria</strong> - avisa quando o <strong>XMP esta desligado</strong> e a RAM caiu para o JEDEC base (2133 no DDR4). <strong>Tipico depois de flashar a BIOS</strong>, que zera o XMP</li>
+<li><code>Kernel-Processor-Power</code> <strong>55</strong>, <strong>WHEA</strong>, desligamentos sujos, falhas de Fast Startup, zona termica e minidumps</li>
+<li><strong>Clock</strong> ocioso e sob carga (mesmo motor da acao Energia)</li>
+</ul>
+<div class="aviso"><strong>O total de eventos engana e a ULTIMA OCORRENCIA e que fecha o caso.</strong> Os contadores sao janela movel de 30/90 dias: so caem quando o evento velho sai da janela, entao continuam altos por semanas mesmo depois do problema resolvido. Se a ultima ocorrencia ficou parada no dia em que voce mexeu, resolveu.</div>
+<div class="info">O <strong>ID 55 e contado por RAJADA, nao por evento</strong>: o Windows registra um por nucleo logico, entao num i9 de 24 threads "408 ocorrencias" sao 17 boots. A acao <strong>Calor e bateria</strong> tambem passou a mostrar isso.</div>
 </div>
 
 <div class="action-card" id="energia">

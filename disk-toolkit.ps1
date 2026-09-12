@@ -307,6 +307,10 @@ function Get-TermicoLinhas {
     try {
         $kp = Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-Kernel-Processor-Power'; StartTime=$d30} -ErrorAction Stop
         if ($kp) {
+            # O Windows registra UM evento POR NUCLEO LOGICO na mesma rajada, entao o
+            # total assusta a toa: num i9 de 24 threads, 168 "ocorrencias" sao 7 boots.
+            # Agrupar por MINUTO da o numero de vezes que realmente aconteceu.
+            $nThreads = [int]$env:NUMBER_OF_PROCESSORS; if ($nThreads -lt 1) { $nThreads = 1 }
             $kp | Group-Object Id | Sort-Object Name | ForEach-Object {
                 $sig = switch ($_.Name) {
                     '37' { 'CPU limitada PELO FIRMWARE (BIOS/EC) - atualizar BIOS' }
@@ -314,7 +318,15 @@ function Get-TermicoLinhas {
                     '55' { 'gerenciamento de energia resetado por defeito de firmware - atualizar BIOS' }
                     default { 'ver descricao no Visualizador de Eventos' }
                 }
+                $rajadas = @($_.Group | Group-Object { $_.TimeCreated.ToString('yyyy-MM-dd HH:mm') })
+                $porRaj  = if ($rajadas.Count) { [int](($rajadas | Measure-Object -Property Count -Average).Average) } else { 0 }
                 A ("Kernel-Processor-Power ID {0}: {1}x em 30 dias - {2}" -f $_.Name, $_.Count, $sig)
+                if ($rajadas.Count -and $rajadas.Count -lt $_.Count) {
+                    A ("   -> sao {0} RAJADA(S) de ~{1} eventos (a maquina tem {2} threads)" -f $rajadas.Count, $porRaj, $nThreads)
+                    if ($porRaj -ge ($nThreads - 2)) {
+                        A '   -> ~1 evento POR NUCLEO: padrao de boot. Contar RAJADAS, nao eventos.'
+                    }
+                }
             }
         } else { A 'Freio termico/firmware: nenhum evento em 30 dias (bom sinal)' }
     } catch { A 'Freio termico/firmware: nenhum evento em 30 dias (bom sinal)' }
@@ -409,6 +421,19 @@ function Get-PowercfgHex2($texto) {
 
 function Get-EnergiaValor($subGuid, $setGuid) {
     return (Get-PowercfgHex2 (Invoke-Powercfg @('/q', 'SCHEME_CURRENT', $subGuid, $setGuid)))
+}
+
+function Get-PastaBackup {
+    # Todo arquivo que o canivete gera vai para Desktop\UTI-backup, a MESMA pasta
+    # que a UTI cria - assim a evidencia do atendimento fica junta e o Desktop limpo.
+    # A UTI so existe se alguem a rodou, entao aqui a pasta e criada se faltar.
+    $d = [Environment]::GetFolderPath('Desktop')
+    if (-not $d -or -not (Test-Path $d)) { $d = Join-Path $env:USERPROFILE 'Desktop' }
+    if (-not (Test-Path $d)) { $d = $env:USERPROFILE }
+    $alvo = Join-Path $d 'UTI-backup'
+    try { if (-not (Test-Path $alvo)) { New-Item -ItemType Directory -Path $alvo -Force -EA Stop | Out-Null } }
+    catch { return $d }   # nao conseguiu criar: cai para o Desktop, nao perde o arquivo
+    return $alvo
 }
 
 function Get-ClockAgora {
@@ -669,6 +694,7 @@ $script:actions = @(
     @{Id='activate'; Name='Ativar Windows (licenca da placa-mae)'; Cat='SISTEMA'; Desc='Le a chave OEM gravada no firmware da placa-mae (tabela MSDM) - a licenca que JA veio comprada com o PC - e mostra o status de ativacao, o tipo de licenca (OEM/Retail/Volume/KMS) e a validade (OEM/Retail = permanente, sem expiracao). Marque "Forcar reativacao" pra instalar a chave OEM e reativar (util apos reinstalar o Windows). Nao funciona em placa sem licenca embutida (avisa).'},
     @{Id='termico'; Name='Calor e bateria (temperatura + throttling)'; Cat='SISTEMA'; Desc='So leitura, nao muda nada. Responde "esta esquentando de mais?" com numero em vez de achismo: temperatura ACPI cruzada com a carga da CPU (74 C parado e problema, 74 C sob carga nao), clock em % do nominal pra ver se a CPU esta sendo freada, eventos de firmware limitando a CPU (37/38/55 - quase sempre BIOS velha), erro de hardware WHEA, desligamentos sujos com o BugcheckCode que separa tela azul de queda seca, minidumps, saude real da bateria (capacidade atual x de fabrica + ciclos) e quem esta comendo CPU. Da um VEREDITO por escrito. Opcional: relatorio de bateria em HTML no Desktop.'},
     @{Id='energia'; Name='Energia / clock da CPU (PC lento a 0,4 GHz)'; Cat='SISTEMA'; Desc='Para "o PC esta lento sem motivo": mede o clock REAL em % do nominal (o % do Gerenciador de Tarefas engana, e relativo ao clock atual), poe CARGA em todos os nucleos e ve se o clock SOBE - clock baixo nao e sintoma, clock que NAO SOBE e. Mostra como a energia esta: teto e piso do processador em AC e bateria (o teto que a UI do Win11 esconde), turbo, limiar da economia de energia, slider de desempenho, power throttling, politica por GPO e gerenciador do fabricante. Se "Liberar a energia" estiver marcado, aplica as correcoes (teto 100%, piso 5%, turbo agressivo, economia de energia so manual, plano Equilibrado, slider em Melhor desempenho, PowerThrottlingOff) e MEDE DE NOVO, dando o veredito: era configuracao, e limite termico/firmware, ou a CPU esta presa e a conversa passa a ser BIOS/EC/garantia. Tudo reversivel, vale na hora sem reiniciar. Opcional: log no Desktop.'},
+    @{Id='checkup'; Name='Checkup comparativo (antes x depois)'; Cat='SISTEMA'; Desc='Para responder "aquilo que eu mexi resolveu?". Grava uma LINHA DE BASE na primeira rodada e, nas seguintes, imprime o ANTES x DEPOIS sozinho - nao precisa guardar nada. Mede: BIOS, memoria (avisa quando o XMP esta desligado e a RAM caiu para o JEDEC base - tipico depois de flashar a BIOS), os contadores que importam (Kernel-Processor-Power 55, WHEA, desligamentos sujos, falhas de Fast Startup, zona termica, minidumps) e o clock ocioso e sob carga. Conta o ID 55 por RAJADA, nao por evento. A metrica que fecha o caso e a ULTIMA OCORRENCIA de cada tipo: se ficou parada no dia em que voce mexeu, resolveu - o total nao serve, porque e janela movel de 30/90 dias. So leitura (o teste de carga usa a CPU por ~13 s).'},
     @{Id='aer'; Name='PCIe: tempestade de erro corrigido (WHEA)'; Cat='SISTEMA'; Desc='Para quando o Visualizador de Eventos vive cheio de WHEA-Logger. Conta os erros de hardware reportados em 30 dias e SEPARA o que importa: "corrigido" (o link errou e se recuperou - nao clampa clock, nao e garantia) de "fatal" (nao recuperou - conversa de garantia). Mostra por Id, o componente e o dispositivo PCI\VEN&DEV com o nome dele, o estado do ASPM (energia do link PCIe) em AC e bateria, e a PROFUNDIDADE do log de Sistema com quem mais escreve nele - porque tempestade de WHEA empurra a prova (o evento 37 de CPU limitada, por exemplo) pra fora do log antes de voce ler. Se marcar "Desligar o ASPM", aplica em AC e bateria (reversivel, precisa REINICIAR) - e a causa nº1 de tempestade de erro corrigido; se nao resolver, o proximo passo e fisico: reassentar Wi-Fi e NVMe.'},
     @{Id='repairboot'; Name='Reparar Boot / Sistema (DISM + SFC)'; Cat='SISTEMA'; Desc='Reparo ONLINE (com o Windows aberto): roda DISM /RestoreHealth (conserta a imagem do sistema, a "fonte" que o SFC usa) e depois SFC /scannow (conserta arquivos protegidos do Windows), le e resume o SrtTrail.txt (o log da tela "nao foi possivel reparar"), e SALVA um arquivo .log no Desktop com o RESULTADO DO SFC na primeira linha e o que ainda falta fazer. Nao roda bootrec/bcdboot (esses so funcionam no WinRE) - mas o log te diz se precisa ir pra la. Envie o .log gerado se precisar de ajuda.'},
 
@@ -1312,6 +1338,11 @@ function Build-Panel($actionId) {
             $script:ctx.enLog = Add-Checkbox 10 67 460 "Salvar log no Desktop" $true
             $script:ctx.output = Add-Multiline 10 94 460 176
         }
+        'checkup' {
+            Add-Label 10 8 460 32 "Grava a linha de base e compara com a rodada anterior. Rode ANTES e DEPOIS de mexer na maquina." $true
+            $script:ctx.ckLog = Add-Checkbox 10 44 460 "Salvar log no Desktop" $true
+            $script:ctx.output = Add-Multiline 10 70 460 200
+        }
         'aer' {
             Add-Label 10 8 460 32 "Clique Executar pra contar os WHEA, ver o ASPM e a profundidade do log (so leitura)." $true
             $script:ctx.aerFix = Add-Checkbox 10 44 460 "Desligar o ASPM do link PCIe (reversivel; precisa REINICIAR pra valer)" $false
@@ -1394,6 +1425,7 @@ function Execute-Action($id) {
             'activate'   { Exec-Activate }
             'termico'    { Exec-Termico }
             'energia'    { Exec-Energia }
+            'checkup'    { Exec-Checkup }
             'aer'        { Exec-Aer }
             'netdiag'    { Exec-NetDiag }
             'netopt'     { Exec-NetOpt }
@@ -1855,7 +1887,7 @@ function Exec-Termico {
             # Desktop: powercfg /batteryreport falha com 0x10d2 e o erro cru vazava pro log.
             $extra = "`nRelatorio de bateria: nao gerado - esta maquina nao tem bateria (desktop)."
         } else {
-            $rel = Join-Path ([Environment]::GetFolderPath('Desktop')) 'bateria.html'
+            $rel = Join-Path (Get-PastaBackup) 'bateria.html'
             cmd /c "powercfg /batteryreport /output ""$rel"" >nul 2>&1"
             $extra = if (Test-Path $rel) { "`nRelatorio de bateria salvo em: $rel" } else { "`nNao consegui gerar o relatorio de bateria." }
         }
@@ -1869,7 +1901,7 @@ function Exec-Termico {
 
     if ($script:ctx.termLog -and $script:ctx.termLog.Checked) {
         try {
-            $dst = Join-Path ([Environment]::GetFolderPath('Desktop')) ("termico_{0}_{1}.txt" -f $env:COMPUTERNAME, (Get-Date -f 'yyyy-MM-dd_HHmm'))
+            $dst = Join-Path (Get-PastaBackup) ("termico_{0}_{1}.txt" -f $env:COMPUTERNAME, (Get-Date -f 'yyyy-MM-dd_HHmm'))
             $out | Out-File $dst -Encoding utf8
             $out += "`nLog salvo em: $dst"
         } catch { $out += "`nNao consegui salvar o log: $($_.Exception.Message)" }
@@ -1878,6 +1910,152 @@ function Exec-Termico {
 
     Set-Output $out
     Set-Status "Medicao concluida" ([System.Drawing.Color]::DarkGreen)
+}
+
+function Exec-Checkup {
+    Set-Status "Coletando indicadores..." ([System.Drawing.Color]::DarkOrange)
+    $pasta = Get-PastaBackup
+    $base  = Join-Path $pasta 'checkup-linha-de-base.json'
+    $L = New-Object System.Collections.Generic.List[string]
+    function AC($t) { $L.Add($t) }
+    $m = @{}
+
+    function ContaEv($prov, $ids, $dias) {
+        # Id=$null no FilterHashtable NAO e "qualquer id": quebra a consulta.
+        # E provider que nunca escreveu evento LANCA - e isso e zero, nao erro.
+        $f = @{ LogName='System'; ProviderName=$prov; StartTime=(Get-Date).AddDays(-$dias) }
+        if ($null -ne $ids) { $f['Id'] = $ids }
+        try { @(Get-WinEvent -FilterHashtable $f -ErrorAction Stop).Count } catch { 0 }
+    }
+
+    AC ("=== CHECKUP - {0} ===" -f (Get-Date -f 'dd/MM/yyyy HH:mm'))
+    try {
+        $bi = Get-CimInstance Win32_BIOS; $bb = Get-CimInstance Win32_BaseBoard
+        $m.bios = "$($bi.SMBIOSBIOSVersion) de $($bi.ReleaseDate.ToString('dd/MM/yyyy'))"
+        AC ("BIOS {0} | {1} rev {2}" -f $m.bios, $bb.Product, $bb.Version)
+    } catch { AC 'BIOS: nao consegui ler' }
+
+    AC ''
+    AC '--- MEMORIA (flashar a BIOS zera o XMP) ---'
+    try {
+        $ram = @(Get-CimInstance Win32_PhysicalMemory)
+        $cfg = ($ram | Measure-Object -Property ConfiguredClockSpeed -Maximum).Maximum
+        $max = ($ram | Measure-Object -Property Speed -Maximum).Maximum
+        $tot = [math]::Round((($ram | Measure-Object -Property Capacity -Sum).Sum)/1GB,1)
+        $m.ram_cfg = $cfg
+        # Speed devolve o teto JEDEC, nao o do XMP: com XMP ligado o configurado fica ACIMA dele.
+        AC ("{0} pente(s), {1} GB | rodando a {2} MHz | JEDEC base {3} MHz" -f $ram.Count,$tot,$cfg,$max)
+        foreach ($r in $ram) { AC ("   {0} {1} | {2} MHz" -f $r.Manufacturer, $r.PartNumber, $r.ConfiguredClockSpeed) }
+        if ($cfg -and $max -and $cfg -lt $max) { AC '>>> XMP DESLIGADO: a RAM esta abaixo do que o pente suporta.' }
+        elseif ($cfg -le 2133) {
+            AC '>>> ATENCAO: 2133 MHz e o JEDEC base do DDR4 - e onde a RAM fica com XMP DESLIGADO.'
+            AC '    Conferir o part number acima: se for 3200/3600, ligar o XMP no BIOS (Tweaker > X.M.P. > Profile1).'
+        } else { AC ("ok: {0} MHz, acima do JEDEC base - XMP LIGADO." -f $cfg) }
+    } catch { AC 'memoria: nao consegui ler' }
+
+    AC ''
+    AC '--- CONTADORES ---'
+    $m.id55_30   = ContaEv 'Microsoft-Windows-Kernel-Processor-Power' 55 30
+    $m.id55_90   = ContaEv 'Microsoft-Windows-Kernel-Processor-Power' 55 90
+    $m.whea_90   = ContaEv 'Microsoft-Windows-WHEA-Logger' $null 90
+    $m.fastfail  = ContaEv 'Microsoft-Windows-Kernel-Boot' 29 90
+    $m.termico   = ContaEv 'Microsoft-Windows-Kernel-Thermal' $null 90
+    try { $m.quedas_90 = @(Get-WinEvent -FilterHashtable @{LogName='System'; Id=41,6008; StartTime=(Get-Date).AddDays(-90)} -EA SilentlyContinue |
+                           Group-Object { $_.TimeCreated.ToString('yyyy-MM-dd HH:mm') }).Count } catch { $m.quedas_90 = 0 }
+    $m.minidumps = @(Get-ChildItem "$env:SystemRoot\Minidump\*.dmp" -Force -EA SilentlyContinue).Count
+    AC ("Kernel-Processor-Power ID 55 .. {0} em 30d | {1} em 90d" -f $m.id55_30, $m.id55_90)
+    $nT = [int]$env:NUMBER_OF_PROCESSORS; if ($nT -lt 1) { $nT = 1 }
+    try {
+        $g = @(Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-Kernel-Processor-Power'; Id=55;
+               StartTime=(Get-Date).AddDays(-90)} -EA SilentlyContinue | Group-Object { $_.TimeCreated.ToString('yyyy-MM-dd HH:mm') })
+        $m.id55_rajadas = $g.Count
+        $porRaj = if ($g.Count) { [int](($g | Measure-Object -Property Count -Average).Average) } else { 0 }
+        if ($g.Count) {
+            AC ("   -> {0} RAJADA(S) de ~{1} eventos (a maquina tem {2} threads)" -f $g.Count, $porRaj, $nT)
+            if ($porRaj -ge ($nT - 2)) { AC '   -> ~1 por nucleo: padrao de boot. Contar RAJADAS, nao eventos.' }
+        }
+    } catch { $m.id55_rajadas = -1 }
+    AC ("WHEA (erro de hardware) ....... {0} em 90d" -f $m.whea_90)
+    AC ("quedas (41/6008, por minuto) .. {0} em 90d" -f $m.quedas_90)
+    AC ("falhas de Fast Startup ........ {0} em 90d" -f $m.fastfail)
+    AC ("eventos de zona termica ....... {0} em 90d  (0 = o Windows nunca viu calor perigoso)" -f $m.termico)
+    AC ("minidumps ..................... {0}" -f $m.minidumps)
+
+    AC ''
+    AC '--- ULTIMA OCORRENCIA (e esta que fecha o caso) ---'
+    foreach ($par in @(@('Microsoft-Windows-Kernel-Processor-Power',55,'ID 55'),
+                       @('Microsoft-Windows-WHEA-Logger',$null,'WHEA'))) {
+        $f = @{ LogName='System'; ProviderName=$par[0]; StartTime=(Get-Date).AddDays(-120) }
+        if ($null -ne $par[1]) { $f['Id'] = $par[1] }
+        try {
+            $e = @(Get-WinEvent -FilterHashtable $f -EA Stop | Select-Object -First 1)
+            AC ("{0,-6}: {1:dd/MM/yyyy HH:mm:ss}  (ha {2} dias)" -f $par[2], $e[0].TimeCreated, [int]((Get-Date)-$e[0].TimeCreated).TotalDays)
+        } catch { AC ("{0,-6}: nenhum em 120 dias" -f $par[2]) }
+    }
+    try { $os = Get-CimInstance Win32_OperatingSystem
+          AC ("ligado desde {0:dd/MM/yyyy HH:mm} ({1:N1} dias)" -f $os.LastBootUpTime, ((Get-Date)-$os.LastBootUpTime).TotalDays) } catch {}
+
+    AC ''
+    AC '--- CLOCK (nominal = 100%) ---'
+    Set-Status "Medindo o clock sob carga (~13 s)..." ([System.Drawing.Color]::DarkOrange)
+    [System.Windows.Forms.Application]::DoEvents()
+    $i = Get-ClockAgora                       # ja usa PercentProcessorPerformance (passa de 100%)
+    $m.clock_idle = if ($i) { [int]$i.Perf } else { -1 }
+    AC ("ocioso .... {0}%" -f $m.clock_idle)
+    $c = Test-CargaClock -Segundos 10
+    if ($c) {
+        $m.clock_carga = [int]$c.Perf
+        # Start-Job nao satura CPU de muitos threads. Clock ALTO com carga parcial ja
+        # PROVA que o turbo sobe; o que carga parcial nao pode fazer e CONDENAR o turbo.
+        if ($c.Perf -ge 150) {
+            AC ("sob carga . {0}%  -> TURBO OK (uso {1}%)" -f [int]$c.Perf, [int]$c.Uso)
+        } elseif ($c.Uso -lt 50) {
+            AC ("sob carga . {0}%  -> INCONCLUSIVO: a carga so chegou a {1}% de uso." -f [int]$c.Perf, [int]$c.Uso)
+            AC "            Nao da p/ condenar o turbo assim. Use a acao 'Energia / clock da CPU'."
+        } else {
+            AC ("sob carga . {0}%  com uso de {1}%: isso e sintoma. Investigar." -f [int]$c.Perf, [int]$c.Uso)
+        }
+    } else { $m.clock_carga = -1; AC 'sob carga . nao consegui medir' }
+
+    AC ''
+    AC '=============================================='
+    if (Test-Path $base) {
+        try {
+            $ant = Get-Content $base -Raw | ConvertFrom-Json
+            AC ("COMPARACAO com {0}" -f $ant.quando)
+            AC ("BIOS: {0}  ->  {1}" -f $ant.m.bios, $m.bios)
+            AC ''
+            AC ("{0,-26} {1,10} {2,10}   {3}" -f 'metrica','antes','agora','')
+            foreach ($k in @('id55_30','id55_90','id55_rajadas','whea_90','quedas_90','fastfail','termico','minidumps','clock_carga','ram_cfg')) {
+                $a = [double]$ant.m.$k; $b = [double]$m.$k
+                $nota = if ($k -in @('clock_carga','ram_cfg')) { if ($b -ge $a) { 'ok' } else { 'CAIU - investigar' } }
+                        elseif ($b -lt $a) { 'MELHOROU' } elseif ($b -gt $a) { 'subiu' } else { 'igual' }
+                AC ("{0,-26} {1,10} {2,10}   {3}" -f $k, $a, $b, $nota)
+            }
+            AC ''
+            AC 'Leitura: os contadores sao janela movel de 30/90 dias - so caem quando o'
+            AC 'evento VELHO sai da janela. O que fecha o caso e a ULTIMA OCORRENCIA acima:'
+            AC 'se ficou parada no dia em que voce mexeu, resolveu.'
+        } catch { AC ("nao consegui ler a linha de base: {0}" -f $_.Exception.Message) }
+    } else {
+        AC 'PRIMEIRA RODADA - linha de base gravada.'
+        AC 'Rode de novo depois de mexer na maquina e ele mostra o antes/depois sozinho.'
+    }
+    AC '=============================================='
+
+    $out = ($L -join "`n")
+    try { @{ quando=(Get-Date -f 'dd/MM/yyyy HH:mm'); m=$m } | ConvertTo-Json -Depth 4 | Out-File $base -Encoding utf8 }
+    catch { $out += "`nNao consegui gravar a linha de base: $($_.Exception.Message)" }
+    if ($script:ctx.ckLog -and $script:ctx.ckLog.Checked) {
+        try {
+            $dst = Join-Path $pasta ("checkup_{0}_{1}.txt" -f $env:COMPUTERNAME, (Get-Date -f 'yyyy-MM-dd_HHmm'))
+            $out | Out-File $dst -Encoding utf8
+            $out += "`nLog salvo em: $dst"
+        } catch { $out += "`nNao consegui salvar o log: $($_.Exception.Message)" }
+    }
+    $out += "`n`n--- pode colar este texto numa IA pra interpretar ---"
+    Set-Output $out
+    Set-Status "Checkup concluido" ([System.Drawing.Color]::DarkGreen)
 }
 
 function Exec-Energia {
@@ -1982,7 +2160,7 @@ function Exec-Energia {
 
     if ($script:ctx.enLog -and $script:ctx.enLog.Checked) {
         try {
-            $dst = Join-Path ([Environment]::GetFolderPath('Desktop')) ("energia_{0}_{1}.txt" -f $env:COMPUTERNAME, (Get-Date -f 'yyyy-MM-dd_HHmm'))
+            $dst = Join-Path (Get-PastaBackup) ("energia_{0}_{1}.txt" -f $env:COMPUTERNAME, (Get-Date -f 'yyyy-MM-dd_HHmm'))
             $out | Out-File $dst -Encoding utf8
             $out += "`nLog salvo em: $dst"
         } catch { $out += "`nNao consegui salvar o log: $($_.Exception.Message)" }
@@ -2032,7 +2210,7 @@ function Exec-Aer {
 
     if ($script:ctx.aerLog -and $script:ctx.aerLog.Checked) {
         try {
-            $dst = Join-Path ([Environment]::GetFolderPath('Desktop')) ("whea-pcie_{0}_{1}.txt" -f $env:COMPUTERNAME, (Get-Date -f 'yyyy-MM-dd_HHmm'))
+            $dst = Join-Path (Get-PastaBackup) ("whea-pcie_{0}_{1}.txt" -f $env:COMPUTERNAME, (Get-Date -f 'yyyy-MM-dd_HHmm'))
             $out | Out-File $dst -Encoding utf8
             $out += "`nLog salvo em: $dst"
         } catch { $out += "`nNao consegui salvar o log: $($_.Exception.Message)" }
@@ -2465,9 +2643,7 @@ function Exec-RepairBoot {
     Set-Status "Passo $stepN/${total}: salvando log..." ([System.Drawing.Color]::DarkOrange)
     [System.Windows.Forms.Application]::DoEvents()
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $deskDir = [Environment]::GetFolderPath('Desktop')
-    if (-not $deskDir -or -not (Test-Path $deskDir)) { $deskDir = $env:USERPROFILE }
-    $logPath = Join-Path $deskDir "reparo-boot-$stamp.log"
+    $logPath = Join-Path (Get-PastaBackup) "reparo-boot-$stamp.log"
     try {
         $logText | Out-File -FilePath $logPath -Encoding UTF8 -ErrorAction Stop
         $script:lastRepairLog = $logPath
