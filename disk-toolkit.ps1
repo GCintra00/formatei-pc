@@ -1303,7 +1303,8 @@ function Build-Panel($actionId) {
         'termico' {
             Add-Label 10 8 460 22 "Clique Executar pra medir calor, throttling e bateria (so leitura)." $true
             $script:ctx.batreport = Add-Checkbox 10 32 460 "Gerar relatorio de bateria (HTML no Desktop)" $false
-            $script:ctx.output = Add-Multiline 10 58 460 212
+            $script:ctx.termLog = Add-Checkbox 10 56 460 "Salvar log no Desktop" $true
+            $script:ctx.output = Add-Multiline 10 82 460 188
         }
         'energia' {
             Add-Label 10 8 460 32 "Mede o clock ocioso e SOB CARGA (o PC fica lento uns 25 s), libera a energia e mede de novo." $true
@@ -1847,9 +1848,17 @@ function Exec-Termico {
 
     $extra = ''
     if ($script:ctx.batreport -and $script:ctx.batreport.Checked) {
-        $rel = Join-Path ([Environment]::GetFolderPath('Desktop')) 'bateria.html'
-        powercfg /batteryreport /output $rel 2>$null | Out-Null
-        $extra = if (Test-Path $rel) { "`nRelatorio de bateria salvo em: $rel" } else { "`nNao consegui gerar o relatorio de bateria (maquina sem bateria?)." }
+        # -ErrorAction nao pega excecao .NET (WMI quebrado) — por isso o try/catch tambem.
+        $temBat = $false
+        try { $temBat = $null -ne (Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue) } catch { $temBat = $false }
+        if (-not $temBat) {
+            # Desktop: powercfg /batteryreport falha com 0x10d2 e o erro cru vazava pro log.
+            $extra = "`nRelatorio de bateria: nao gerado - esta maquina nao tem bateria (desktop)."
+        } else {
+            $rel = Join-Path ([Environment]::GetFolderPath('Desktop')) 'bateria.html'
+            cmd /c "powercfg /batteryreport /output ""$rel"" >nul 2>&1"
+            $extra = if (Test-Path $rel) { "`nRelatorio de bateria salvo em: $rel" } else { "`nNao consegui gerar o relatorio de bateria." }
+        }
     }
 
     $out  = "=== Calor e bateria - $(Get-Date -f 'dd/MM/yyyy HH:mm') ===`n"
@@ -1857,6 +1866,14 @@ function Exec-Termico {
     $out += "$((Get-CimInstance Win32_Processor).Name)`n`n"
     $out += ($linhas -join "`n")
     $out += "`n$extra"
+
+    if ($script:ctx.termLog -and $script:ctx.termLog.Checked) {
+        try {
+            $dst = Join-Path ([Environment]::GetFolderPath('Desktop')) ("termico_{0}_{1}.txt" -f $env:COMPUTERNAME, (Get-Date -f 'yyyy-MM-dd_HHmm'))
+            $out | Out-File $dst -Encoding utf8
+            $out += "`nLog salvo em: $dst"
+        } catch { $out += "`nNao consegui salvar o log: $($_.Exception.Message)" }
+    }
     $out += "`n`n--- pode colar este texto numa IA pra interpretar ---"
 
     Set-Output $out

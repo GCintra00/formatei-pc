@@ -587,9 +587,10 @@ ACESSO DE OUTRAS MAQUINAS WINDOWS:
 <li><strong>Saude real da bateria:</strong> capacidade atual sobre a de fabrica + ciclos</li>
 <li><strong>Top 5 processos</strong> comendo CPU agora</li>
 </ul>
-<h4>Opcao</h4>
+<h4>Opcoes</h4>
 <ul class="action-fields">
-<li><strong>Relatorio de bateria (HTML no Desktop):</strong> o <code>powercfg /batteryreport</code>, pra comparar capacidade de projeto x carga total</li>
+<li><strong>Salvar log no Desktop</strong> (marcado por padrao): grava <code>termico_&lt;PC&gt;_&lt;data&gt;.txt</code>, igual as acoes de energia e WHEA. Ate 12/09/2026 esta acao <strong>so mostrava na tela</strong> - quem atendia tinha que copiar e colar o laudo na mao.</li>
+<li><strong>Relatorio de bateria (HTML no Desktop):</strong> o <code>powercfg /batteryreport</code>, pra comparar capacidade de projeto x carga total. Em <strong>desktop</strong> ele nem tenta e diz o porque - antes o <code>powercfg</code> falhava com <code>0x10d2</code> e o erro cru vazava pro log da UTI.</li>
 </ul>
 <div class="info">Termina com um <strong>VEREDITO por escrito</strong> e a saida ja sai marcada pra colar numa IA. Muitos notebooks <strong>nao expoem</strong> temperatura por ACPI - nesses, medir com HWiNFO64 portable (aba Sensors).</div>
 </div>
