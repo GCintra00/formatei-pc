@@ -64,30 +64,49 @@ function Test-Bateria {
     $bat = Safe { Get-CimInstance Win32_Battery -ErrorAction Stop }
     if (-not $bat) { $o.Luz='cinza'; $o.Resumo='sem bateria (desktop?)'; $o.Linhas += 'Nenhuma bateria detectada - provavelmente um desktop.'; return $o }
 
-    $design = Safe { (Get-CimInstance -Namespace root\wmi -Class BatteryStaticData -ErrorAction Stop | Select-Object -First 1).DesignedCapacity }
-    $full   = Safe { (Get-CimInstance -Namespace root\wmi -Class BatteryFullChargedCapacity -ErrorAction Stop | Select-Object -First 1).FullChargedCapacity }
-    $ciclos = Safe { (Get-CimInstance -Namespace root\wmi -Class BatteryCycleCount -ErrorAction Stop | Select-Object -First 1).CycleCount }
-
     $o.Linhas += "Carga atual: $($bat.EstimatedChargeRemaining)%"
+    $o.Linhas += "Estado: $(if($bat.BatteryStatus -eq 2){'no carregador'}else{'na bateria'})"
+
+    # relatorio oficial do Windows - HTML (humano) + XML (p/ eu ler a capacidade).
+    # Estar no carregador NAO atrapalha: capacidade de fabrica/atual sao valores fixos.
+    # Ambos costumam exigir admin.
+    $html = Join-Path $PASTA 'bateria-relatorio.html'
+    $xml  = Join-Path $PASTA 'bateria.xml'
+    Safe { powercfg /batteryreport /output "$html" | Out-Null }
+    Safe { powercfg /batteryreport /output "$xml" /XML | Out-Null }
+
+    # 1a fonte: WMI (root\wmi). 2a fonte (fallback): o XML do powercfg.
+    $design = Safe { [double](Get-CimInstance -Namespace root\wmi -Class BatteryStaticData -ErrorAction Stop | Select-Object -First 1).DesignedCapacity }
+    $full   = Safe { [double](Get-CimInstance -Namespace root\wmi -Class BatteryFullChargedCapacity -ErrorAction Stop | Select-Object -First 1).FullChargedCapacity }
+    $ciclos = Safe { [int](Get-CimInstance -Namespace root\wmi -Class BatteryCycleCount -ErrorAction Stop | Select-Object -First 1).CycleCount }
+    $fonte = 'WMI'
+    if ((-not $design -or -not $full -or $design -le 0) -and (Test-Path $xml)) {
+        $raw = Safe { Get-Content $xml -Raw }
+        if ($raw) {
+            $md = [regex]::Match($raw, '<DesignCapacity>(\d+)</DesignCapacity>')
+            $mf = [regex]::Match($raw, '<FullChargeCapacity>(\d+)</FullChargeCapacity>')
+            $mc = [regex]::Match($raw, '<CycleCount>(\d+)</CycleCount>')
+            if ($md.Success) { $design = [double]$md.Groups[1].Value }
+            if ($mf.Success) { $full   = [double]$mf.Groups[1].Value }
+            if ($mc.Success -and -not $ciclos) { $ciclos = [int]$mc.Groups[1].Value }
+            $fonte = 'relatorio Windows'
+        }
+    }
+
     if ($design -and $full -and $design -gt 0) {
         $saude = [math]::Round(($full / $design) * 100)
-        $o.Linhas += "Capacidade de fabrica: $design mWh"
-        $o.Linhas += "Capacidade atual     : $full mWh"
-        $o.Linhas += "Saude da bateria     : $saude% da original"
+        $o.Linhas += "Capacidade de fabrica: $([int]$design) mWh"
+        $o.Linhas += "Capacidade atual     : $([int]$full) mWh"
+        $o.Linhas += "Saude da bateria     : $saude% da original (fonte: $fonte)"
         if ($ciclos) { $o.Linhas += "Ciclos de carga      : $ciclos" }
         if     ($saude -ge 80) { $o.Luz='verde';    $o.Resumo="saude $saude% - boa" }
         elseif ($saude -ge 50) { $o.Luz='amarelo';  $o.Resumo="saude $saude% - desgastada" }
         else                   { $o.Luz='vermelho'; $o.Resumo="saude $saude% - trocar" }
     } else {
-        if (-not $EH_ADMIN) { $o.Luz='cinza'; $o.Resumo='saude exige admin'; $o.Linhas += 'Rode como administrador para ver a saude real (capacidade atual x de fabrica).' }
-        else { $o.Luz='amarelo'; $o.Resumo='saude indisponivel'; $o.Linhas += 'O firmware desta bateria nao expoe a capacidade de fabrica - veja o HTML abaixo.' }
+        if (-not $EH_ADMIN) { $o.Luz='cinza'; $o.Resumo='saude exige admin'; $o.Linhas += 'Rode como ADMINISTRADOR para ver a saude real (pelo canivete ja vem elevado).' }
+        else { $o.Luz='amarelo'; $o.Resumo='saude indisponivel'; $o.Linhas += 'Nem o WMI nem o relatorio do Windows expuseram a capacidade - veja o HTML.' }
     }
-    # relatorio HTML oficial do Windows - SEMPRE tenta salvar na pasta (powercfg
-    # costuma exigir admin; sem admin pode nao gerar, mas nao custa tentar)
-    $html = Join-Path $PASTA 'bateria-relatorio.html'
-    Safe { powercfg /batteryreport /output "$html" | Out-Null }
-    if (Test-Path $html) { $o.Linhas += "Relatorio HTML da bateria salvo: $html" }
-    elseif (-not $EH_ADMIN) { $o.Linhas += "(HTML da bateria nao gerado - precisa de admin)" }
+    if (Test-Path $html) { $o.Linhas += "Relatorio HTML da bateria: $html" }
     return $o
 }
 
