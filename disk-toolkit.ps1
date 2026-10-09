@@ -699,6 +699,7 @@ $script:actions = @(
     @{Id='repairboot'; Name='Reparar Boot / Sistema (DISM + SFC)'; Cat='SISTEMA'; Desc='Reparo ONLINE (com o Windows aberto): roda DISM /RestoreHealth (conserta a imagem do sistema, a "fonte" que o SFC usa) e depois SFC /scannow (conserta arquivos protegidos do Windows), le e resume o SrtTrail.txt (o log da tela "nao foi possivel reparar"), e SALVA um arquivo .log no Desktop com o RESULTADO DO SFC na primeira linha e o que ainda falta fazer. Nao roda bootrec/bcdboot (esses so funcionam no WinRE) - mas o log te diz se precisa ir pra la. Envie o .log gerado se precisar de ajuda.'},
 
     # === SEGURANCA ===
+    @{Id='avaliarpc'; Name='Avaliar PC (antes do estoque/entrega)'; Cat='SISTEMA'; Desc='Checklist de entrega: passa um pente pelo PC antes de guardar no estoque ou entregar a outra pessoa. Testa bateria (saude real x de fabrica), poe CARGA na CPU por ~3 min pra ver se fica lenta ou esquenta (burn-in, com temperatura e erro de hardware WHEA), CAMERA e SOM testados DE VERDADE (abre a camera e toca um som, voce confirma se viu/ouviu), dispositivos conectados (teclado, mouse, touchpad - avisa o que esta sem driver ou com erro) e rede (chega no roteador e na internet). NAO altera nada. Dois resultados: uma JANELA com um semaforo por item (verde ok / amarelo atencao / vermelho problema), so as luzes sem numeros; e uma PASTA no Desktop (UTI-backup\Avaliacao-PC-data) com o relatorio COMPLETO + um bloco pronto pra colar numa IA interpretar. Abre em janela propria. Roda do repo formatei-pc (GCintra00).'},
     @{Id='rastreador'; Name='Rastreador de acessos remotos'; Cat='SEGURANCA'; Desc='So leitura, nao altera e nao remove nada. Procura QUEM pode entrar nesta maquina de fora: programas de acesso remoto e RMM (AnyDesk, TeamViewer, ScreenConnect, Atera, RustDesk, Action1 e ~25 outros), servico ou tarefa agendada rodando de lugar incomum, AnyDesk com senha fixa (entra sem ninguem aceitar) e RDP habilitado. Confere QUEM ASSINOU cada binario - "alterado depois de assinado" nunca e normal. Fala PT/ES/EN conforme o Windows. Gera um TXT no Desktop pronto pra ler OU pra colar em qualquer IA (o arquivo traz as instrucoes e um bloco JSON dentro). Abre em janela propria. Roda direto do repo formatei-pc (GCintra00).'},
 
     # === INTERNET/WIFI ===
@@ -1362,6 +1363,10 @@ function Build-Panel($actionId) {
             Add-Label 10 10 460 58 "Abre o rastreador numa janela PowerShell propria. Nao pede admin (com admin ve mais). Ao final salva um TXT no Desktop: acessos-remotos-USUARIO-PC-data.txt - da pra ler na mao ou colar numa IA, o arquivo ja explica o que ela deve fazer." $false
             $script:ctx.output = Add-Multiline 10 74 460 196
         }
+        'avaliarpc' {
+            Add-Label 10 10 460 72 "Abre a avaliacao numa janela propria. Leva ~3-4 min (o burn-in da CPU e de 3 min). VAI PEDIR que voce confirme se viu a camera e ouviu o som. No fim mostra um semaforo (so as luzes) e salva o relatorio completo em Desktop\UTI-backup\Avaliacao-PC-data - esse TXT pode ser colado numa IA." $false
+            $script:ctx.output = Add-Multiline 10 86 460 184
+        }
         'netopt' {
             Add-Label 10 8 460 22 "Ajustes seguros (clique Executar pra aplicar os marcados):" $true
             $script:ctx.optPower    = Add-Checkbox 10 34 460 "Desligar economia de energia da placa WiFi" $true
@@ -1437,6 +1442,7 @@ function Execute-Action($id) {
             'chkdsk'     { Exec-Chkdsk }
             'uti'        { Exec-Uti }
             'rastreador' { Exec-Rastreador }
+            'avaliarpc'  { Exec-AvaliarPc }
             'repairboot' { Exec-RepairBoot }
             'defrag'     { Exec-Defrag }
             'wipefree'   { Exec-WipeFree }
@@ -2347,6 +2353,19 @@ function Exec-Rastreador {
                 "o que a varredura NAO consegue provar.`n`n" +
                 "Se der ACHADO: nao desinstalar e nao apagar nada - a maquina e prova.")
     Set-Status "Rastreador lancado em nova janela" ([System.Drawing.Color]::DarkGreen)
+}
+
+function Exec-AvaliarPc {
+    $cmd = 'irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/avaliar-pc.ps1 | iex'
+    Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',$cmd
+    Set-Output ("Avaliacao aberta em janela propria (leva ~3-4 min - o burn-in da CPU e de 3 min).`n`n" +
+                "Durante o teste ela VAI PERGUNTAR se voce viu a camera e ouviu o som:`n" +
+                "responda Sim/Nao na tela.`n`n" +
+                "No fim: uma janela com o semaforo (verde ok / amarelo atencao / vermelho`n" +
+                "problema), so as luzes, sem numeros.`n`n" +
+                "Relatorio completo: Desktop\UTI-backup\Avaliacao-PC-data\`n" +
+                "O TXT de la pode ser colado em qualquer IA pra interpretar.")
+    Set-Status "Avaliacao lancada em nova janela" ([System.Drawing.Color]::DarkGreen)
 }
 
 function Exec-NetOpt {
