@@ -177,7 +177,7 @@ function Test-Carga {
 # ===================== 3. CAMERA (interativo) =====================
 function Test-Camera {
     $o = @{ Nome='Camera'; Luz='cinza'; Resumo=''; Linhas=@() }
-    $cams = Safe { Get-PnpDevice -Class Camera,Image -ErrorAction Stop | Where-Object { $_.Name -and $_.Name -notmatch 'Virtual|OBS|Snap' } }
+    $cams = Safe { Get-PnpDevice -Class Camera,Image -PresentOnly -ErrorAction Stop | Where-Object { $_.Name -and $_.Name.Trim() -and $_.Status -and $_.Name -notmatch 'Virtual|OBS|Snap' } }
     if (-not $cams) { $o.Luz='vermelho'; $o.Resumo='nenhuma camera encontrada'; $o.Linhas += 'O Windows nao lista nenhuma camera fisica.'; return $o }
     foreach ($c in $cams) { $o.Linhas += ("Camera: {0} [{1}]" -f $c.Name, $c.Status) }
     $comErro = $cams | Where-Object { $_.Status -ne 'OK' }
