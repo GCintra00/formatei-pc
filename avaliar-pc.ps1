@@ -102,6 +102,17 @@ function Test-Bateria {
         if     ($saude -ge 80) { $o.Luz='verde';    $o.Resumo="saude $saude% - boa" }
         elseif ($saude -ge 50) { $o.Luz='amarelo';  $o.Resumo="saude $saude% - desgastada" }
         else                   { $o.Luz='vermelho'; $o.Resumo="saude $saude% - trocar" }
+
+        # autonomia fora da tomada: medida (se na bateria agora) ou estimada da capacidade
+        $ert = Safe { [double]$bat.EstimatedRunTime }
+        if ($bat.BatteryStatus -ne 2 -and $ert -and $ert -gt 0 -and $ert -lt 71582788) {
+            $hr = [math]::Round($ert/60,1); $o.Linhas += "Autonomia agora (medida): ~$hr h fora da tomada"
+            $o.Tag = "$saude% de vida, ~$hr h"
+        } else {
+            $hr = [math]::Round($full/12000,1)   # estimativa grosseira a ~12 W
+            $o.Linhas += "Autonomia estimada: ~$hr h fora da tomada (estimativa a ~12 W; so vira medida quando estiver na bateria)"
+            $o.Tag = "$saude% de vida, ~${hr}h"
+        }
     } else {
         if (-not $EH_ADMIN) { $o.Luz='cinza'; $o.Resumo='saude exige admin'; $o.Linhas += 'Rode como ADMINISTRADOR para ver a saude real (pelo canivete ja vem elevado).' }
         else { $o.Luz='amarelo'; $o.Resumo='saude indisponivel'; $o.Linhas += 'Nem o WMI nem o relatorio do Windows expuseram a capacidade - veja o HTML.' }
@@ -361,11 +372,11 @@ $f.StartPosition = 'CenterScreen'
 $f.FormBorderStyle = 'FixedDialog'; $f.MaximizeBox = $false; $f.MinimizeBox = $false
 $f.AutoScaleMode = 'None'
 $f.BackColor = [System.Drawing.Color]::White
-$f.ClientSize = New-Object System.Drawing.Size(430, (120 + $RES.Count * 32 + 70))
+$f.ClientSize = New-Object System.Drawing.Size(500, (120 + $RES.Count * 32 + 70))
 
 $hdr = New-Object System.Windows.Forms.Label
 $hdr.Location = New-Object System.Drawing.Point(16,14); $hdr.AutoSize = $false
-$hdr.Size = New-Object System.Drawing.Size(400,52)
+$hdr.Size = New-Object System.Drawing.Size(470,52)
 $hdr.Font = New-Object System.Drawing.Font('Segoe UI',11,[System.Drawing.FontStyle]::Bold)
 $hdr.Text = $veredito
 $hdr.ForeColor = $cor[$pior]
@@ -376,11 +387,13 @@ $y = 78
 foreach ($r in $RES) {
     $row = New-Object System.Windows.Forms.Label
     $row.Location = New-Object System.Drawing.Point(24,$y); $row.AutoSize = $false
-    $row.Size = New-Object System.Drawing.Size(390,26)
+    $row.Size = New-Object System.Drawing.Size(460,26)
     $row.Font = New-Object System.Drawing.Font('Segoe UI',11,[System.Drawing.FontStyle]::Bold)
     $row.ForeColor = $cor[$r.Luz]
     $row.TextAlign = 'MiddleLeft'
-    $row.Text = ("{0}  {1}  -  {2}" -f ([char]0x25CF), $r.Nome, $palavra[$r.Luz])
+    $rtxt = ("{0}  {1}  -  {2}" -f ([char]0x25CF), $r.Nome, $palavra[$r.Luz])
+    if ($r.Tag) { $rtxt += ("  ({0})" -f $r.Tag) }
+    $row.Text = $rtxt
     $f.Controls.Add($row)
     $y += 32
 }
@@ -393,7 +406,7 @@ $btnPasta.Add_Click({ Safe { Start-Process explorer.exe $PASTA } })
 $f.Controls.Add($btnPasta)
 
 $btnOk = New-Object System.Windows.Forms.Button
-$btnOk.Location = New-Object System.Drawing.Point(304,$y); $btnOk.Size = New-Object System.Drawing.Size(110,36)
+$btnOk.Location = New-Object System.Drawing.Point(374,$y); $btnOk.Size = New-Object System.Drawing.Size(110,36)
 $btnOk.Text = 'Fechar'; $btnOk.Font = New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Bold)
 $btnOk.Add_Click({ $f.Close() }); $f.Controls.Add($btnOk)
 
