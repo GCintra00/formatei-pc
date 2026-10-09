@@ -168,7 +168,7 @@ function Test-Camera {
     Safe { Start-Process 'microsoft.windows.camera:' }
     Start-Sleep -Seconds 2
     $r = [System.Windows.Forms.MessageBox]::Show("A camera abriu e voce esta VENDO a imagem na tela?`n`nSim = funciona   Nao = nao abriu / tela preta", 'Teste de camera', 'YesNo', 'Question')
-    Safe { Get-Process WindowsCamera -ErrorAction SilentlyContinue | Stop-Process -Force }
+    Safe { Get-Process WindowsCamera -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null } }
     if ($r -eq 'Yes') { $o.Luz='verde'; $o.Resumo='imagem confirmada'; $o.Linhas += 'Operador CONFIRMOU que viu a imagem.' }
     else { $o.Luz='vermelho'; $o.Resumo='sem imagem (confirmado)'; $o.Linhas += 'Operador NAO viu imagem - driver presente mas sem saida de video.' }
     return $o
@@ -202,7 +202,7 @@ function Test-Dispositivos {
     $comErro = $todos | Where-Object { $_.Status -eq 'ERROR' -or ($_.Status -eq 'UNKNOWN') }
     foreach ($cls in @('Keyboard','Mouse','HIDClass')) {
         $d = $todos | Where-Object { $_.Class -eq $cls }
-        if ($d) { $o.Linhas += ("{0}: {1} dispositivo(s), {2} com erro" -f $cls, $d.Count, ($d | Where-Object Status -ne 'OK').Count) }
+        if ($d) { $o.Linhas += ("{0}: {1} dispositivo(s), {2} com erro" -f $cls, @($d).Count, @($d | Where-Object Status -ne 'OK').Count) }
         else    { $o.Linhas += "${cls}: nenhum presente" }
     }
     $temTeclado = ($todos | Where-Object { $_.Class -eq 'Keyboard' -and $_.Status -eq 'OK' })
@@ -310,52 +310,51 @@ Write-Host "  Relatorio: $txt" -ForegroundColor Gray
 Write-Host ""
 
 # ===================== JANELA RESUMO (so luzes) =====================
-$cor = @{ 'verde'=[System.Drawing.Color]::FromArgb(40,167,69); 'amarelo'=[System.Drawing.Color]::FromArgb(220,160,0); 'vermelho'=[System.Drawing.Color]::FromArgb(200,40,40); 'cinza'=[System.Drawing.Color]::Gray }
+$cor = @{ 'verde'=[System.Drawing.Color]::FromArgb(40,167,69); 'amarelo'=[System.Drawing.Color]::FromArgb(200,140,0); 'vermelho'=[System.Drawing.Color]::FromArgb(200,40,40); 'cinza'=[System.Drawing.Color]::Gray }
 $palavra = @{ 'verde'='OK'; 'amarelo'='ATENCAO'; 'vermelho'='PROBLEMA'; 'cinza'='N/A' }
 
 $f = New-Object System.Windows.Forms.Form
 $f.Text = "Avaliacao - $HOST_NOME"
-$f.Size = New-Object System.Drawing.Size(440, 480)
 $f.StartPosition = 'CenterScreen'
-$f.FormBorderStyle = 'FixedDialog'; $f.MaximizeBox = $false
+$f.FormBorderStyle = 'FixedDialog'; $f.MaximizeBox = $false; $f.MinimizeBox = $false
+$f.AutoScaleMode = 'None'
+$f.BackColor = [System.Drawing.Color]::White
+$f.ClientSize = New-Object System.Drawing.Size(430, (120 + $RES.Count * 32 + 70))
 
 $hdr = New-Object System.Windows.Forms.Label
-$hdr.Location = New-Object System.Drawing.Point(16,14); $hdr.Size = New-Object System.Drawing.Size(400,48)
-$hdr.Font = New-Object System.Drawing.Font('Segoe UI',12,[System.Drawing.FontStyle]::Bold)
+$hdr.Location = New-Object System.Drawing.Point(16,14); $hdr.AutoSize = $false
+$hdr.Size = New-Object System.Drawing.Size(400,52)
+$hdr.Font = New-Object System.Drawing.Font('Segoe UI',11,[System.Drawing.FontStyle]::Bold)
 $hdr.Text = $veredito
 $hdr.ForeColor = $cor[$pior]
 $f.Controls.Add($hdr)
 
-$y = 72
+# cada linha e UM rotulo colorido (bolinha + nome + palavra) - texto e bolinha na mesma cor
+$y = 78
 foreach ($r in $RES) {
-    $dot = New-Object System.Windows.Forms.Label
-    $dot.Location = New-Object System.Drawing.Point(20,$y); $dot.Size = New-Object System.Drawing.Size(22,22)
-    $dot.Text = [char]0x25CF; $dot.Font = New-Object System.Drawing.Font('Segoe UI',14,[System.Drawing.FontStyle]::Bold)
-    $dot.ForeColor = $cor[$r.Luz]; $f.Controls.Add($dot)
-
-    $nm = New-Object System.Windows.Forms.Label
-    $nm.Location = New-Object System.Drawing.Point(50,$y+2); $nm.Size = New-Object System.Drawing.Size(240,22)
-    $nm.Font = New-Object System.Drawing.Font('Segoe UI',10); $nm.Text = $r.Nome; $f.Controls.Add($nm)
-
-    $st = New-Object System.Windows.Forms.Label
-    $st.Location = New-Object System.Drawing.Point(300,$y+2); $st.Size = New-Object System.Drawing.Size(110,22)
-    $st.Font = New-Object System.Drawing.Font('Segoe UI',10,[System.Drawing.FontStyle]::Bold)
-    $st.Text = $palavra[$r.Luz]; $st.ForeColor = $cor[$r.Luz]; $f.Controls.Add($st)
-    $y += 34
+    $row = New-Object System.Windows.Forms.Label
+    $row.Location = New-Object System.Drawing.Point(24,$y); $row.AutoSize = $false
+    $row.Size = New-Object System.Drawing.Size(390,26)
+    $row.Font = New-Object System.Drawing.Font('Segoe UI',11,[System.Drawing.FontStyle]::Bold)
+    $row.ForeColor = $cor[$r.Luz]
+    $row.TextAlign = 'MiddleLeft'
+    $row.Text = ("{0}  {1}  -  {2}" -f ([char]0x25CF), $r.Nome, $palavra[$r.Luz])
+    $f.Controls.Add($row)
+    $y += 32
 }
+$y += 10
 
 $btnPasta = New-Object System.Windows.Forms.Button
-$btnPasta.Location = New-Object System.Drawing.Point(20,($y+16)); $btnPasta.Size = New-Object System.Drawing.Size(200,36)
+$btnPasta.Location = New-Object System.Drawing.Point(24,$y); $btnPasta.Size = New-Object System.Drawing.Size(220,36)
 $btnPasta.Text = 'Abrir pasta do relatorio'; $btnPasta.Font = New-Object System.Drawing.Font('Segoe UI',9)
 $btnPasta.Add_Click({ Safe { Start-Process explorer.exe $PASTA } })
 $f.Controls.Add($btnPasta)
 
 $btnOk = New-Object System.Windows.Forms.Button
-$btnOk.Location = New-Object System.Drawing.Point(300,($y+16)); $btnOk.Size = New-Object System.Drawing.Size(110,36)
+$btnOk.Location = New-Object System.Drawing.Point(304,$y); $btnOk.Size = New-Object System.Drawing.Size(110,36)
 $btnOk.Text = 'Fechar'; $btnOk.Font = New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Bold)
 $btnOk.Add_Click({ $f.Close() }); $f.Controls.Add($btnOk)
 
-$f.Height = $y + 110
 [void]$f.ShowDialog()
 
 # contador de uso (nao manda nada do conteudo)
