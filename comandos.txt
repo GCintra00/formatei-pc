@@ -1,0 +1,215 @@
+##########################################################
+#  COMANDOS DE TI - COPIAR E COLAR NO POWERSHELL          #
+#  Enxugado em 25/08/2026. Versao completa antiga em      #
+#  "scripts powershell.txt.bak-2026-08-25"                #
+#  Sempre: PowerShell como ADMINISTRADOR                  #
+##########################################################
+
+
+==========================================
+  >> OS 4 DE SEMPRE <<
+==========================================
+
+
+===================================
+  1. CANIVETE SUICO (Disk Toolkit)
+  Janela com 15 acoes: saude do disco (SMART),
+  particao, backup, usuarios, rede, ativar Windows,
+  reparar boot, calor e bateria, rastreador de
+  acesso remoto, e atalho p/ a UTI.
+  Quando na duvida, comece por aqui.
+===================================
+
+irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/disk-toolkit.ps1 | iex
+
+
+===================================
+  2. SETUP PC - EMPRESA (12 etapas)
+  PC novo de funcionario. Se cair no meio,
+  rodar de novo: retoma de onde parou.
+===================================
+
+$dns = "8.8.8.8","8.8.4.4"
+Get-NetAdapter | Where-Object Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses $dns }; irm https://raw.githubusercontent.com/igcintra/pc-setup/master/setup.ps1 | iex
+
+
+===================================
+  3. SETUP PC - PARTICULAR
+  Maquina pessoal (a sua ou de conhecido).
+  Escolha UMA das duas linhas abaixo.
+===================================
+
+--- 3a. FULL (setup completo) ---
+$dns = "8.8.8.8","8.8.4.4"
+Get-NetAdapter | Where-Object Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses $dns }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex
+
+--- 3b. LIGHT (so Chrome + limpezas) ---
+$dns = "8.8.8.8","8.8.4.4"
+Get-NetAdapter | Where-Object Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses $dns }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex
+
+
+===================================
+  4. UTI DO WINDOWS (v6)
+  PC travado / lento / DISM e SFC.
+  Pergunta o modo na largada. Log e backups
+  em Desktop\UTI-backup. REINICIAR ao final.
+  Depois do reboot, rodar o POS-UTI (abaixo).
+===================================
+
+irm https://raw.githubusercontent.com/GCintra00/limpeza/master/uti-v6.ps1 | iex
+
+
+==========================================
+  >> SOB DEMANDA (por sintoma) <<
+==========================================
+
+
+===================================
+  "A CONTA ESTA BLOQUEADA" - NAO CONSIGO ENTRAR
+  Win 11 tranca sozinho apos 10 senhas erradas
+  (padrao de fabrica, so em instalacao limpa) e
+  solta em 10 min. Diz QUEM errava a senha: a
+  pessoa no teclado ou alguem pela rede (com IP).
+  So leitura: nao destranca e nao muda politica.
+  RODAR COMO ADMIN (log de Seguranca) - ele exige.
+===================================
+
+irm https://raw.githubusercontent.com/igcintra/pc-setup/master/diagnostico-bloqueio-conta.ps1 | iex
+
+
+===================================
+  "REINICIEI MAS NAO REINICIOU" - POS-UTI
+  Fast Startup faz desligamento hibrido: o
+  reparo do DISM/SFC nao assenta. Rode DEPOIS
+  da UTI, reinicie, e so ai rode a UTI de novo.
+===================================
+
+irm https://raw.githubusercontent.com/igcintra/pc-setup/master/pos-uti.ps1 | iex
+
+
+===================================
+  "O PC ESQUENTA MUITO" - CALOR E BATERIA
+  Temperatura cruzada com a carga (74 C parado
+  e problema; sob carga nao e), throttling,
+  evento de firmware, desligamento sujo e saude
+  da bateria. So leitura. Auto-eleva.
+===================================
+
+irm https://raw.githubusercontent.com/GCintra00/limpeza/master/termico.ps1 | iex
+
+
+===================================
+  "O PC ESTA LENTO" - CPU PRESA NO CLOCK MINIMO
+  Quando a CPU nao passa de 0,4 GHz (o % do
+  Gerenciador de Tarefas engana). Mede ocioso e
+  SOB CARGA, LIBERA a energia (tira do modo
+  economia, teto/piso, turbo, slider) e mede de
+  novo. Auto-eleva. Log no Desktop.
+  So laudo, sem mexer:  $env:ENERGIA_SODIAG=1
+===================================
+
+irm https://raw.githubusercontent.com/GCintra00/limpeza/master/energia.ps1 | iex
+
+
+===================================
+  "O SLACK NAO ME AVISA" - NOTIFICACOES
+  RODAR COMO A PROPRIA PESSOA (chave por perfil).
+===================================
+
+irm https://raw.githubusercontent.com/igcintra/pc-setup/master/restaurar-notificacoes.ps1 | iex
+
+
+===================================
+  "O WIFI CONECTA E CAI" - 3 PASSOS
+  1) diagnostico  2) fix de energia da placa
+  3) reteste (rodar 1x na rede e 1x no hotspot
+     do celular: cair nas duas = placa/driver)
+===================================
+
+irm https://raw.githubusercontent.com/igcintra/pc-setup/master/diag-wifi.ps1 | iex
+irm https://raw.githubusercontent.com/igcintra/pc-setup/master/fix-wifi-energia.ps1 | iex
+irm https://raw.githubusercontent.com/igcintra/pc-setup/master/reteste-wifi.ps1 | iex
+
+
+===================================
+  "NAO ME OUVEM NO MEET" - AUDIO
+===================================
+
+irm https://raw.githubusercontent.com/igcintra/pc-setup/master/diag-audio.ps1 | iex
+
+
+===================================
+  SUSPEITA DE ACESSO REMOTO - VARREDURA
+  So leitura, nao pede admin. Vereditos:
+  ACHADO / REVISAR / LIMPO. Gera TXT no Desktop
+  pronto p/ colar numa IA.
+  SE DER ACHADO: nao desinstalar nada, a maquina
+  e prova.
+  Versao da EMPRESA (nome casa com o tutorial do
+  accounting) e versao PESSOAL sao gemeas.
+===================================
+
+irm https://raw.githubusercontent.com/igcintra/pc-setup/master/verificar-action1.ps1 | iex
+
+
+===================================
+  TIRAR O TEAMVIEWER (nao toca no AnyDesk)
+  Guarda a prova antes de apagar: TXT + ZIP no
+  Desktop - PEDIR OS 2 ARQUIVOS p/ a pessoa.
+===================================
+
+irm https://raw.githubusercontent.com/igcintra/pc-setup/master/remover-teamviewer.ps1 | iex
+
+
+===================================
+  PC EM BUILD ANTECIPADA - CANAL ESTAVEL
+  Ja embutido no setup desde 04/08/2026.
+  Este aqui e p/ PC JA ENTREGUE.
+===================================
+
+irm https://raw.githubusercontent.com/igcintra/pc-setup/master/canal-estavel-updates.ps1 | iex
+
+
+==========================================
+  >> LINHAS SOLTAS <<
+==========================================
+
+
+===================================
+  CORRIGIR DNS (Google) - "nao baixa nada"
+===================================
+
+$dns = "8.8.8.8","8.8.4.4"
+Get-NetAdapter | Where-Object Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses $dns }
+
+
+===================================
+  SERIAL NUMBER DO PC
+===================================
+
+(Get-CimInstance -ClassName Win32_BIOS).SerialNumber
+
+
+===================================
+  LIMPEZA DO SISTEMA (cache, temp, lixeira)
+  Antes: conferir se o Chrome esta sincronizando.
+===================================
+
+irm https://raw.githubusercontent.com/GCintra00/limpeza/master/limpeza.ps1 | iex
+
+
+===================================
+  PLANO B - GITHUB FORA DO AR
+  Erro 503 / 429 / timeout no irm|iex NAO e o
+  script nem o PC: e a CDN do GitHub, e cai para
+  a sala inteira ao mesmo tempo.
+  1) tentar de novo (seta pra cima + Enter)
+  2) se insistir, a linha abaixo baixa pelo
+     api.github.com. Trocar $repo e $s.
+===================================
+
+[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $repo='igcintra/pc-setup'; $s='verificar-action1.ps1'; $c=$null; foreach($u in @("https://raw.githubusercontent.com/$repo/master/$s","https://api.github.com/repos/$repo/contents/$s")){ try{ $r=irm $u -TimeoutSec 25; $c=if($r.content){[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($r.content))}else{[string]$r}; break }catch{} }; if($c){ iex $c }else{ Write-Host 'NAO consegui baixar o script (GitHub fora). Tente de novo em 1 minuto.' -ForegroundColor Red }
+
+  Outros valores:
+    $repo='GCintra00/limpeza';     $s='uti-v6.ps1'
+    $repo='GCintra00/formatei-pc'; $s='disk-toolkit.ps1'
