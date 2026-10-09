@@ -82,12 +82,12 @@ function Test-Bateria {
         if (-not $EH_ADMIN) { $o.Luz='cinza'; $o.Resumo='saude exige admin'; $o.Linhas += 'Rode como administrador para ver a saude real (capacidade atual x de fabrica).' }
         else { $o.Luz='amarelo'; $o.Resumo='saude indisponivel'; $o.Linhas += 'O firmware desta bateria nao expoe a capacidade de fabrica - veja o HTML abaixo.' }
     }
-    # relatorio HTML oficial do Windows, para o detalhe fino
-    if ($EH_ADMIN) {
-        $html = Join-Path $PASTA 'bateria-relatorio.html'
-        Safe { powercfg /batteryreport /output "$html" | Out-Null }
-        if (Test-Path $html) { $o.Linhas += "Relatorio completo da bateria: $html" }
-    }
+    # relatorio HTML oficial do Windows - SEMPRE tenta salvar na pasta (powercfg
+    # costuma exigir admin; sem admin pode nao gerar, mas nao custa tentar)
+    $html = Join-Path $PASTA 'bateria-relatorio.html'
+    Safe { powercfg /batteryreport /output "$html" | Out-Null }
+    if (Test-Path $html) { $o.Linhas += "Relatorio HTML da bateria salvo: $html" }
+    elseif (-not $EH_ADMIN) { $o.Linhas += "(HTML da bateria nao gerado - precisa de admin)" }
     return $o
 }
 
@@ -243,7 +243,30 @@ function Test-Rede {
     if ($gw) { $okGw = Safe { Test-Connection -ComputerName $gw -Count 2 -Quiet -ErrorAction Stop } ; $o.Linhas += "Ping no roteador ($gw): $(if($okGw){'OK'}else{'FALHOU'})" }
     $okNet = Safe { Test-Connection -ComputerName '8.8.8.8' -Count 2 -Quiet -ErrorAction Stop } ; $o.Linhas += "Ping na internet (8.8.8.8): $(if($okNet){'OK'}else{'FALHOU'})"
 
-    if     ($okNet) { $o.Luz='verde';    $o.Resumo='internet ok' }
+    # velocidade REAL de download (ve se a placa/link puxa bem, nao so se "chega")
+    $mbps = $null
+    if ($okNet) {
+        Passo 'Medindo velocidade de download...'
+        $url = 'https://speed.cloudflare.com/__down?bytes=10000000'   # 10 MB
+        try {
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $old = $ProgressPreference; $ProgressPreference = 'SilentlyContinue'
+            $tmp = Join-Path $env:TEMP 'avp-speed.tmp'
+            Invoke-WebRequest -Uri $url -OutFile $tmp -TimeoutSec 30 -UseBasicParsing -ErrorAction Stop
+            $sw.Stop(); $ProgressPreference = $old
+            $bytes = (Get-Item $tmp).Length
+            Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+            if ($sw.Elapsed.TotalSeconds -gt 0 -and $bytes -gt 0) {
+                $mbps = [math]::Round(($bytes * 8) / $sw.Elapsed.TotalSeconds / 1MB, 1)
+                $o.Linhas += "Velocidade de download: $mbps Mbps (baixou $([math]::Round($bytes/1MB)) MB em $([math]::Round($sw.Elapsed.TotalSeconds,1))s)"
+            }
+        } catch { $o.Linhas += "Velocidade de download: nao medida ($($_.Exception.Message))" }
+    }
+
+    if ($okNet) {
+        if     ($mbps -ne $null -and $mbps -lt 5) { $o.Luz='amarelo'; $o.Resumo="internet ok, mas lenta ($mbps Mbps)" }
+        else                                      { $o.Luz='verde';   $o.Resumo=if($mbps -ne $null){"internet ok ($mbps Mbps)"}else{'internet ok'} }
+    }
     elseif ($okGw)  { $o.Luz='amarelo';  $o.Resumo='chega no roteador, sem internet' }
     else            { $o.Luz='vermelho'; $o.Resumo='sem conexao' }
     return $o
