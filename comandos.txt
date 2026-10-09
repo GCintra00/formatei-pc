@@ -65,6 +65,20 @@ irm https://raw.githubusercontent.com/GCintra00/limpeza/master/uti-v6.ps1 | iex
 
 
 ===================================
+  "VOU GUARDAR/ENTREGAR ESTE PC" - AVALIAR ANTES
+  Checklist de entrega: bateria, carga/lentidao
+  (burn-in 3 min), temperatura, CAMERA e SOM (voce
+  confirma se viu/ouviu), teclado/mouse/touchpad e
+  rede. NAO altera nada. Mostra um semaforo (so as
+  luzes) e salva o relatorio completo em Desktop\
+  UTI-backup\Avaliacao-PC-data (da pra colar numa IA).
+  Tambem esta no canivete (SISTEMA > Avaliar PC).
+===================================
+
+irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/avaliar-pc.ps1 | iex
+
+
+===================================
   "A CONTA ESTA BLOQUEADA" - NAO CONSIGO ENTRAR
   Win 11 tranca sozinho apos 10 senhas erradas
   (padrao de fabrica, so em instalacao limpa) e
