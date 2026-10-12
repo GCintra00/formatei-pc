@@ -162,7 +162,7 @@ Write-Host "`n[1/$etapaTotal] Removendo bloatware..." -ForegroundColor Cyan
 # Derrubar TODOS os processos bloatware para permitir remocao
 Write-Host "  Encerrando processos..." -ForegroundColor Yellow
 Get-Process -ErrorAction SilentlyContinue | Where-Object {
-    $_.Name -match "mcafee|mcshield|mcuicnt|ModuleCore|MMSSHOST|McPvTray|WebAdvisor|McInstaller|mfemms|mfevtps|mcods|mfefire|mfetp|protectedmodulehost|OneDrive|OneDriveSetup|ms-teams|Teams|Dropbox|DropboxUpdate|Spotify|Facebook|Instagram|TikTok"
+    $_.Name -match "mcafee|mcshield|mcuicnt|ModuleCore|MMSSHOST|McPvTray|WebAdvisor|McInstaller|mfemms|mfevtps|mcods|mfefire|mfetp|protectedmodulehost|OneDrive|OneDriveSetup|ms-teams|Teams|Dropbox|DropboxUpdate|Facebook|Instagram|TikTok"
 } | Stop-Process -Force -ErrorAction SilentlyContinue
 # Desativar servicos McAfee
 Get-Service -DisplayName "*McAfee*" -ErrorAction SilentlyContinue | ForEach-Object {
@@ -229,14 +229,11 @@ $bloatware = @(
     "McAfee*",
     "*McAfeeSecurity*",
     # --- terceiros que vem "patrocinados" ---
-    "SpotifyAB.SpotifyMusic*",
     "king.com.*",
     "BytedancePte.Ltd.TikTok*",
     "Facebook*",
     "Instagram*",
     "*.Twitter*",
-    "*Netflix*",
-    "AmazonVideo.PrimeVideo*",
     "Disney*",
     "*.AdobePhotoshopExpress*",
     "*.Duolingo*",

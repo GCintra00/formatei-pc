@@ -4,7 +4,8 @@
 # (jogos, streaming, redes sociais) + OneDrive/Teams pessoal.
 # NAO mexe em: Store, App Installer (winget), Calculadora, Fotos, Camera,
 # Bloco de Notas, Paint, Ferramenta de Captura, Media Player, Assistencia
-# Rapida, Terminal, Edge, Office instalado, ferramentas do fabricante
+# Rapida, Terminal, Edge, Office instalado, Spotify, Netflix, Prime Video,
+# ferramentas do fabricante
 # (Lenovo Vantage, HP, Dell) - elas controlam camera/bateria/teclado.
 # Compativel com Windows 10 e 11
 # ============================================
@@ -113,14 +114,11 @@ $bloatware = @(
     "McAfee*",
     "*McAfeeSecurity*",
     # --- terceiros que vem "patrocinados" ---
-    "SpotifyAB.SpotifyMusic*",
     "king.com.*",
     "BytedancePte.Ltd.TikTok*",
     "Facebook*",
     "Instagram*",
     "*.Twitter*",
-    "*Netflix*",
-    "AmazonVideo.PrimeVideo*",
     "Disney*",
     "*.AdobePhotoshopExpress*",
     "*.Duolingo*",
