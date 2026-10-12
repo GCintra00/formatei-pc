@@ -93,6 +93,10 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 | AJUDA              | Descricao detalhada do que essa      |
 |   - Comandos       | acao faz, em portugues, com avisos.  |
 |                    |                                      |
+| PC NOVO            |                                      |
+|   - Setup light    |                                      |
+|   - Limpar bloat   |                                      |
+|                    |                                      |
 | INFORMACAO         | Campos contextuais:                  |
 |   - SMART          |  [dropdown disco/volume]             |
 |   - Detalhes       |  [campos de texto]                   |
@@ -130,6 +134,7 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 |   - Calor/bateria  |                                      |
 |   - Energia/clock  |                                      |
 |   - Reparar Boot   |                                      |
+|   - Avaliar PC     |                                      |
 |                    |                                      |
 | SEGURANCA          |                                      |
 |   - Rastreador     |                                      |
@@ -149,6 +154,8 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <div class="toc">
 <ul>
 <li><a href="#helpcmds">Comandos GCintra00 (cheat sheet)</a></li>
+<li><a href="#setuplight">Configurar PC novo (setup light)</a></li>
+<li><a href="#bloatware">Limpar bloatware (Microsoft + McAfee)</a></li>
 <li><a href="#smart">S.M.A.R.T. (Saude do disco)</a></li>
 <li><a href="#info">Informacoes detalhadas</a></li>
 <li><a href="#overview">Visao geral - todos os discos</a></li>
@@ -175,6 +182,7 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li><a href="#energia">Energia / clock da CPU</a></li>
 <li><a href="#aer">PCIe: tempestade de erro corrigido (WHEA)</a></li>
 <li><a href="#repairboot">Reparar Boot / Sistema (DISM + SFC)</a></li>
+<li><a href="#avaliarpc">Avaliar PC (antes do estoque/entrega)</a></li>
 <li><a href="#rastreador">Rastreador de acessos remotos</a></li>
 <li><a href="#netdiag">Diagnostico de conexao (WiFi + ping)</a></li>
 <li><a href="#netopt">Otimizar rede (placa WiFi + DNS)</a></li>
@@ -196,6 +204,7 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <ul class="action-fields">
 <li><strong>Setup Completo de PC Novo</strong> (setup.ps1) - 8 etapas de configuracao pos-formatacao</li>
 <li><strong>Setup Light</strong> (setup-light.ps1) - so Chrome + limpezas</li>
+<li><strong>Limpar bloatware</strong> (limpar-bloatware.ps1) - so a faxina, nao instala nada</li>
 <li><strong>Disk Toolkit</strong> (este script) - re-executar</li>
 <li><strong>Preparar HDD Storage</strong> (prepare-storage.ps1) - Wipe & Format focado</li>
 <li><strong>Limpeza do Sistema</strong> (limpeza.ps1) - cache/cookies/temp</li>
@@ -206,6 +215,37 @@ code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: '
 <li><strong>Listar compartilhamentos SMB</strong></li>
 </ul>
 <div class="info">O botao "Executar Acao" tambem dispara o "Rodar (nova janela)" do script selecionado, como atalho.</div>
+</div>
+
+<!-- ============================= -->
+<h2>3.7. PC NOVO <span class="tag tag-maint">configuracao</span></h2>
+<!-- ============================= -->
+
+<div class="action-card" id="setuplight">
+<div class="action-title">Configurar PC novo (setup light) <span class="tag tag-info">janela propria</span></div>
+<p class="action-desc">Para PC recem-chegado ou recem-formatado. Pede confirmacao, acerta o DNS (8.8.8.8) e roda o <code>setup-light.ps1</code> do repo <code>formatei-pc</code> numa janela elevada. 6 etapas:</p>
+<ul class="action-fields">
+<li><strong>Bloatware:</strong> a mesma lista do "Limpar bloatware" (abaixo), McAfee incluido</li>
+<li><strong>Google Chrome</strong> via winget, com fallback para o MSI direto do Google</li>
+<li><strong>Dicas e propaganda</strong> do Windows desligadas (o clique no relogio continua abrindo o calendario)</li>
+<li><strong>Barra de tarefas:</strong> so Chrome + Explorador de Arquivos, sem busca/widgets/chat/Task View</li>
+<li><strong>Energia:</strong> hibernar SIM, "Desligar" desliga de verdade (sem Fast Startup)</li>
+<li><strong>Inicio automatico:</strong> fica so o essencial (Seguranca do Windows, audio)</li>
+</ul>
+<div class="aviso"><strong>Nao usar em PC ja em uso:</strong> a barra de tarefas e o inicio automatico da pessoa serao trocados. O Explorer reinicia no meio (a tela pisca). Reiniciar ao final. Log em <code>Downloads\formatei-light-log_*.txt</code>.</div>
+</div>
+
+<div class="action-card" id="bloatware">
+<div class="action-title">Limpar bloatware (Microsoft + McAfee) <span class="tag tag-info">janela propria</span></div>
+<p class="action-desc">So a faxina: <strong>nao instala nada</strong> e nao mexe em barra, energia ou notificacoes. Roda o <code>limpar-bloatware.ps1</code> numa janela elevada. 4 etapas:</p>
+<ul class="action-fields">
+<li><strong>Apps de fabrica:</strong> Copilot, Cortana, Outlook (novo), Email e Calendario, Noticias/Clima/Bing, Xbox, Clipchamp, Solitaire, Vincular ao Celular, Hub de Comentarios, Mapas, Family, Dev Home, Power Automate, Paint 3D, Filmes e TV, Teams pessoal, OneDrive, e patrocinados (Candy Crush, TikTok, Spotify, Netflix, Prime Video, Disney+...). Remove de todos os perfis <strong>e</strong> do provisionamento - usuario novo que logar nao recebe de volta.</li>
+<li><strong>McAfee inteiro:</strong> tarefas agendadas, Appx, winget, desinstalador silencioso e, se sobrar, o removedor oficial <strong>MCPR</strong> (o unico que tira o LiveSafe). No fim verifica e diz a verdade. Antivirus McAfee/Trellix <strong>corporativo</strong> e detectado e preservado.</li>
+<li><strong>OneDrive, Teams pessoal, Dropbox</strong> (versoes de desktop)</li>
+<li><strong>Impede a volta:</strong> desliga "apps sugeridos" e a reinstalacao silenciosa</li>
+</ul>
+<div class="info"><strong>Nao toca em:</strong> Store, App Installer (winget), Calculadora, Fotos, Camera, Bloco de Notas, Paint, Ferramenta de Captura, Media Player, Assistencia Rapida, Terminal, Edge, Office instalado e ferramentas do fabricante (Lenovo Vantage, HP, Dell) - elas controlam camera, bateria e teclado.</div>
+<div class="aviso"><strong>Se o resumo disser "McAfee AINDA PRESENTE":</strong> reiniciar e rodar de novo - parte dele so sai apos o reboot. Log em <code>Desktop\UTI-backup\limpar-bloatware-log_*.txt</code>.</div>
 </div>
 
 <!-- ============================= -->
@@ -681,6 +721,16 @@ ACESSO DE OUTRAS MAQUINAS WINDOWS:
 </ul>
 <div class="info">Nao inclui <code>bootrec</code>/<code>bcdboot</code>: esses so funcionam no Ambiente de Recuperacao (WinRE), nao com o Windows aberto. Quando forem necessarios, o proprio log avisa e mostra os comandos.</div>
 <div class="aviso"><strong>DISM precisa de internet:</strong> em Win10 antigos com problema de TLS pode falhar - nesse caso desmarque o DISM e rode so o SFC, ou aponte uma fonte <code>install.wim</code>. O erro do DISM e registrado sem travar o resto.</div>
+</div>
+
+<div class="action-card" id="avaliarpc">
+<div class="action-title">Avaliar PC (antes do estoque/entrega) <span class="tag tag-safe">so leitura</span> <span class="tag tag-info">janela propria</span></div>
+<p class="action-desc">Checklist de entrega: roda o <code>avaliar-pc.ps1</code> e testa bateria (saude real x de fabrica), CPU sob carga por ~3 min (clock, temperatura, erro WHEA), camera e som <strong>de verdade</strong> (voce confirma se viu/ouviu), teclado/mouse/dispositivos e rede (com teste de velocidade).</p>
+<ul class="action-fields">
+<li><strong>Janela-semaforo:</strong> verde/amarelo/vermelho por item + veredito PRONTO / ATENCAO / NAO ENTREGAR</li>
+<li><strong>Relatorio completo</strong> em <code>Desktop\UTI-backup\Avaliacao-PC-data\</code>, com bloco pronto para colar numa IA</li>
+</ul>
+<div class="aviso"><strong>O Defender pode cortar o teste no meio</strong> (a carga de CPU parece minerador). Falso positivo: pausar a protecao em tempo real e rodar de novo.</div>
 </div>
 
 <!-- ============================= -->

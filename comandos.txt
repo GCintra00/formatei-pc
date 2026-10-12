@@ -43,7 +43,7 @@ Get-NetAdapter | Where-Object Status -eq Up | ForEach-Object { Set-DnsClientServ
 $dns = "8.8.8.8","8.8.4.4"
 Get-NetAdapter | Where-Object Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses $dns }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex
 
---- 3b. LIGHT (so Chrome + limpezas) ---
+--- 3b. LIGHT (so Chrome + limpezas) - tambem no canivete (PC NOVO) ---
 $dns = "8.8.8.8","8.8.4.4"
 Get-NetAdapter | Where-Object Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses $dns }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex
 
@@ -62,6 +62,21 @@ irm https://raw.githubusercontent.com/GCintra00/limpeza/master/uti-v6.ps1 | iex
 ==========================================
   >> SOB DEMANDA (por sintoma) <<
 ==========================================
+
+
+===================================
+  "PC NOVO CHEIO DE LIXO" - SO LIMPAR (nao instala nada)
+  Apps de fabrica da Microsoft (Copilot, Outlook novo,
+  Xbox, Clipchamp, Noticias...), McAfee INTEIRO (ate o
+  LiveSafe, via MCPR oficial), OneDrive/Teams/Dropbox e
+  patrocinados (Candy Crush, TikTok...). Nao mexe em
+  barra, energia, Store, Calculadora, Camera, Office nem
+  Vantage. Se o resumo disser "McAfee ainda presente":
+  reiniciar e rodar de novo. Se eleva sozinho.
+  Tambem no canivete (PC NOVO > Limpar bloatware).
+===================================
+
+irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/limpar-bloatware.ps1 | iex
 
 
 ===================================

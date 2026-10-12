@@ -658,6 +658,10 @@ $script:actions = @(
     # === AJUDA ===
     @{Id='helpcmds'; Name='Comandos (cheat sheet)'; Cat='AJUDA'; Desc='Lista de scripts disponiveis via "irm | iex" das contas GCintra00 (pessoal) e igcintra (empresa). Util pra lembrar rapido os outros comandos quando ta atendendo um PC. Clica "Rodar (nova janela)" pra executar ou "Copiar pro clipboard" pra colar no PowerShell.'},
 
+    # === PC NOVO ===
+    @{Id='setuplight'; Name='Configurar PC novo (setup light)'; Cat='PC NOVO'; Desc='Para PC recem-chegado ou recem-formatado. Abre em janela propria e faz 6 etapas sozinho: remove bloatware (apps da Microsoft, McAfee completo, OneDrive/Teams, jogos e apps patrocinados), instala o Google Chrome, cala dicas e propaganda do Windows, deixa a barra de tarefas so com Chrome + Explorador de Arquivos, ajusta a energia (hibernar SIM, desligar de verdade) e tira os programas do inicio automatico. Log em Downloads. Reiniciar ao final.'},
+    @{Id='bloatware'; Name='Limpar bloatware (Microsoft + McAfee)'; Cat='PC NOVO'; Desc='So a faxina, sem instalar nada e sem mexer em barra/energia. Remove os apps que vem de fabrica (Copilot, Cortana, Outlook novo, Xbox, Clipchamp, Noticias, Vincular ao Celular, Solitaire...), McAfee inteiro (inclusive LiveSafe, com o removedor oficial MCPR), OneDrive, Teams pessoal, Dropbox e apps patrocinados (Candy Crush, TikTok, Spotify, Netflix...). Tira tambem dos usuarios FUTUROS e desliga a reinstalacao automatica. NAO mexe em Store, Calculadora, Fotos, Camera, Paint, Media Player, Office instalado nem nas ferramentas do fabricante (Vantage etc).'},
+
     # === INFORMACAO ===
     @{Id='smart'; Name='S.M.A.R.T. (Saude do disco)'; Cat='INFORMACAO'; Desc='Le o status auto-reportado pelo proprio drive. Mostra saude geral (OK/Warning/Critical), horas de uso, temperatura, setores realocados e contagem de erros. Util pra detectar disco em pre-falha antes que dê problema serio.'},
     @{Id='info'; Name='Informacoes detalhadas'; Cat='INFORMACAO'; Desc='Mostra tudo que da pra saber sobre um disco: modelo, serial, firmware, tipo (HDD/SSD/NVMe), tabela (GPT/MBR), barramento (SATA/USB/NVMe), tamanho total, particoes existentes e seus filesystems.'},
@@ -847,6 +851,7 @@ function Build-Panel($actionId) {
             $script:helpCmdsGC = @(
                 @{Name='Setup PC Pessoal'; Desc='8 etapas: bloatware + programas + config'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup.ps1 | iex'},
                 @{Name='Setup Light'; Desc='so Chrome + limpezas (mais rapido)'; Cmd='Get-NetAdapter | Where Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex'},
+                @{Name='Limpar bloatware'; Desc='so faxina: apps da Microsoft + McAfee + patrocinados (nao instala nada)'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/limpar-bloatware.ps1 | iex'},
                 @{Name='Disk Toolkit'; Desc='esta ferramenta (re-executar)'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/disk-toolkit.ps1 | iex'},
                 @{Name='Preparar HDD Storage'; Desc='wipe + format NTFS focado'; Cmd='irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/prepare-storage.ps1 | iex'},
                 @{Name='Limpeza do Sistema'; Desc='cache, cookies, temp'; Cmd='irm https://raw.githubusercontent.com/GCintra00/limpeza/master/limpeza.ps1 | iex'},
@@ -1367,6 +1372,14 @@ function Build-Panel($actionId) {
             Add-Label 10 10 460 72 "Abre a avaliacao numa janela propria. Leva ~3-4 min (o burn-in da CPU e de 3 min). VAI PEDIR que voce confirme se viu a camera e ouviu o som. No fim mostra um semaforo (so as luzes) e salva o relatorio completo em Desktop\UTI-backup\Avaliacao-PC-data - esse TXT pode ser colado numa IA." $false
             $script:ctx.output = Add-Multiline 10 86 460 184
         }
+        'setuplight' {
+            Add-Label 10 10 460 72 "Abre o setup light numa janela propria (elevada). 6 etapas: bloatware + McAfee, Chrome, sem dicas/propaganda, barra so com Chrome + Explorador, energia, inicio automatico. Leva 10-20 min. A tela pisca quando o Explorer reinicia. Reiniciar o PC ao final. Log em Downloads." $false
+            $script:ctx.output = Add-Multiline 10 86 460 184
+        }
+        'bloatware' {
+            Add-Label 10 10 460 72 "Abre a limpeza numa janela propria (elevada). So remove: apps de fabrica da Microsoft, McAfee (inclusive LiveSafe), OneDrive/Teams/Dropbox e patrocinados. Nao instala nada, nao mexe em barra nem energia. No fim mostra o resumo. Log em Desktop\UTI-backup." $false
+            $script:ctx.output = Add-Multiline 10 86 460 184
+        }
         'netopt' {
             Add-Label 10 8 460 22 "Ajustes seguros (clique Executar pra aplicar os marcados):" $true
             $script:ctx.optPower    = Add-Checkbox 10 34 460 "Desligar economia de energia da placa WiFi" $true
@@ -1443,6 +1456,8 @@ function Execute-Action($id) {
             'uti'        { Exec-Uti }
             'rastreador' { Exec-Rastreador }
             'avaliarpc'  { Exec-AvaliarPc }
+            'setuplight' { Exec-SetupLight }
+            'bloatware'  { Exec-Bloatware }
             'repairboot' { Exec-RepairBoot }
             'defrag'     { Exec-Defrag }
             'wipefree'   { Exec-WipeFree }
@@ -2366,6 +2381,30 @@ function Exec-AvaliarPc {
                 "Relatorio completo: Desktop\UTI-backup\Avaliacao-PC-data\`n" +
                 "O TXT de la pode ser colado em qualquer IA pra interpretar.")
     Set-Status "Avaliacao lancada em nova janela" ([System.Drawing.Color]::DarkGreen)
+}
+
+function Exec-SetupLight {
+    if (-not (Confirm-Action ("Configurar este PC como PC NOVO (setup light)?`n`n" +
+            "Remove bloatware, instala o Chrome, padroniza a barra de tarefas, ajusta energia e`n" +
+            "tira programas do inicio automatico. O Explorer reinicia no meio (a tela pisca).`n`n" +
+            "Nao use em PC que ja esta em uso por alguem: a barra e o inicio automatico dele serao trocados."))) { return }
+    $cmd = 'Get-NetAdapter | Where-Object Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("8.8.8.8","8.8.4.4") }; irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/setup-light.ps1 | iex'
+    Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',$cmd
+    Set-Output ("Setup light aberto em janela propria (10-20 min; McAfee LiveSafe pode levar mais).`n`n" +
+                "Acompanhe por la. A tela pisca quando ele reinicia o Explorer (barra de tarefas).`n`n" +
+                "Ao final: REINICIAR o PC.`n" +
+                "Log: Downloads\formatei-light-log_data.txt")
+    Set-Status "Setup light lancado em nova janela" ([System.Drawing.Color]::DarkGreen)
+}
+
+function Exec-Bloatware {
+    $cmd = 'irm https://raw.githubusercontent.com/GCintra00/formatei-pc/master/limpar-bloatware.ps1 | iex'
+    Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',$cmd
+    Set-Output ("Limpeza de bloatware aberta em janela propria (2-5 min; com McAfee LiveSafe, ate 20).`n`n" +
+                "No fim ela mostra o RESUMO: o que saiu, o que nao saiu e se sobrou McAfee.`n" +
+                "Se sobrou McAfee: REINICIAR e rodar de novo (parte dele so sai apos o reboot).`n`n" +
+                "Log: Desktop\UTI-backup\limpar-bloatware-log_data.txt")
+    Set-Status "Limpeza de bloatware lancada em nova janela" ([System.Drawing.Color]::DarkGreen)
 }
 
 function Exec-NetOpt {
